@@ -2,8 +2,13 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch:   # allows manual trigger from GitHub UI
+    branches: [ main, dev ]
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build'
+        required: false
+        default: 'main'
 
 env:
   REGISTRY: ghcr.io
@@ -31,7 +36,8 @@ jobs:
         id: version
         run: echo "VERSION=$(cat VERSION)" >> $GITHUB_OUTPUT
 
-      - name: Build and push
+      - name: Build and push (main → latest + version tag)
+        if: github.ref == 'refs/heads/main'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -39,3 +45,13 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+
+      - name: Build and push (dev → dev tag)
+        if: github.ref == 'refs/heads/dev'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-dev

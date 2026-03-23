@@ -94,3 +94,22 @@ SoundStitch generates a self-signed certificate on first run. Your browser will 
 ## License
 
 MIT
+
+## Docker Image Tags
+
+| Tag | Description |
+|-----|-------------|
+| `latest` | Current stable release — recommended for most users |
+| `0.6.13` | Specific version — pin this if you want to control updates manually |
+| `dev` | Development build — latest changes, may be unstable |
+| `0.6.13-dev` | Specific dev build |
+
+**Stable (default):**
+```yaml
+image: ghcr.io/ashenkeep/soundstitch:latest
+```
+
+**Dev (early access):**
+```yaml
+image: ghcr.io/ashenkeep/soundstitch:dev
+```
