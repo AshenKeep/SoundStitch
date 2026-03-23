@@ -347,6 +347,9 @@ def _check_discovery_followups():
 
     except Exception as e:
         print(f"[SCHEDULER] Discovery follow-up error: {e}")
+
+
+def _check_backup_schedule():
     """Auto-create a timestamped backup if the backup schedule is due."""
     try:
         conf = cfg.load()
