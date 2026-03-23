@@ -32,22 +32,38 @@ A self-hosted playlist sync engine. Union-merges your Navidrome, Spotify, and Yo
 docker compose pull && docker compose restart
 ```
 
-That's it — the image is rebuilt automatically whenever a new version is pushed.
-
 ## Setup
 
 ### Navidrome
 Set your Navidrome URL, username, and password in **Connections → Navidrome**.
 
 ### Spotify
+
+> **Important — OAuth requires HTTPS with a trusted certificate.**
+> Spotify's OAuth flow will not complete over a self-signed certificate or plain HTTP. If you are running SoundStitch only on your local network without a reverse proxy, **use the YouTube Music browser headers method instead of OAuth**, or set up a reverse proxy (Caddy, Nginx Proxy Manager, Traefik) with a valid certificate first.
+>
+> If you are exposing SoundStitch publicly with a real domain and valid cert (e.g. via Let's Encrypt), OAuth works fine.
+
+For setups with a valid certificate:
 1. Go to https://developer.spotify.com/dashboard and create an app
-2. Add `https://YOUR_HOST_IP:8443/api/spotify/callback` as a Redirect URI
+2. Add `https://YOUR_DOMAIN:8443/api/spotify/callback` as a Redirect URI
 3. Enter your Client ID and Secret in **Connections → Spotify**, then click Connect
 
+For local/self-signed setups:
+- Spotify sync groups still work — you can use Spotify playlist IDs directly
+- OAuth just cannot complete without a trusted cert, so the Connect button won't work
+- Set up a reverse proxy with a real cert to enable full OAuth
+
 ### YouTube Music
+
+YouTube Music does **not** use OAuth. Instead it uses browser request headers copied from your logged-in session. This works regardless of whether you have a reverse proxy or public domain.
+
 1. Open `music.youtube.com` in your browser while logged in
-2. Press F12 → Network tab → click any request → right-click Request Headers → Copy
-3. Paste into **Connections → YouTube Music**
+2. Press F12 → Network tab → click any request to `music.youtube.com`
+3. Right-click the Request Headers section → Copy → Copy request headers
+4. Paste into **Connections → YouTube Music → Save Headers & Connect**
+
+> Headers expire after a few weeks. When YouTube Music stops working, re-paste fresh headers.
 
 ### Last.fm (for Discovery)
 1. Get a free API key at https://www.last.fm/api/account/create
@@ -69,12 +85,42 @@ SoundStitch union-merges all sources, pushes new tracks back to each platform, a
 ## Discovery Playlists
 
 Create discovery playlists in the **Discovery** tab. Sources:
-- **Spotify** — any specific playlist (paste the share URL)
-- **Last.fm Loved** — tracks you've hearted in Last.fm
+- **Spotify** — any specific playlist (paste the share URL or ID)
+- **Last.fm Loved** — tracks you have hearted in Last.fm
 - **Last.fm Similar** — top tracks from artists similar to your taste
 - **Last.fm Tag** — top tracks for a genre tag (e.g. `trance`, `house`)
 
-Each discovery sync wipes and rebuilds the Navidrome playlist with fresh recommendations. Enable follow-up checks to get notified if Lidarr hasn't downloaded requested tracks after a configurable delay.
+Each discovery sync wipes and rebuilds the Navidrome playlist with fresh recommendations. Enable follow-up checks to get notified if Lidarr has not downloaded requested tracks after a configurable delay.
+
+## Password Reset
+
+If you are locked out of the UI, SoundStitch has a built-in emergency reset mechanism that does not require access to the web interface.
+
+1. Stop the container:
+   ```bash
+   docker compose down
+   ```
+2. Add a `RESET_TOKEN` environment variable to your `docker-compose.yml`:
+   ```yaml
+   environment:
+     RESET_TOKEN: "some-secret-word"
+   ```
+3. Start the container again:
+   ```bash
+   docker compose up -d
+   ```
+4. Send a POST request with your new password:
+   ```bash
+   curl -k -X POST https://YOUR_HOST_IP:8443/api/reset-password \
+     -H "Content-Type: application/json" \
+     -d '{"token":"some-secret-word","new_password":"yournewpassword"}'
+   ```
+5. Stop the container, **remove the RESET_TOKEN line** from your compose file, then start again:
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+> Always remove the RESET_TOKEN after use. Leaving it in place means anyone who can reach the port can reset your password.
 
 ## Data
 
@@ -85,15 +131,15 @@ All data lives in `./data/` next to your compose file:
 - `data/logs/` — sync logs
 - `data/backups/` — automatic backups
 
-**Back up your `data/` folder** — it contains your config and playlists.
+**Back up your `data/` folder regularly** — it contains your config, encryption key, and playlists. If you lose `data/.secret` your config cannot be decrypted.
 
 ## Self-Signed Certificate
 
-SoundStitch generates a self-signed certificate on first run. Your browser will show a warning — click Advanced → Proceed. For production use, put a reverse proxy (e.g. Caddy, Nginx Proxy Manager) in front and terminate TLS there.
+SoundStitch generates a self-signed certificate at build time. Your browser will show a warning — click Advanced → Proceed. For production use, put a reverse proxy in front and terminate TLS there. Recommended options:
 
-## License
-
-MIT
+- **Caddy** — automatic HTTPS with Let's Encrypt, minimal config
+- **Nginx Proxy Manager** — GUI-based, good for beginners
+- **Traefik** — good if you are already running it for other containers
 
 ## Docker Image Tags
 
@@ -113,3 +159,7 @@ image: ghcr.io/ashenkeep/soundstitch:latest
 ```yaml
 image: ghcr.io/ashenkeep/soundstitch:dev
 ```
+
+## License
+
+MIT
