@@ -1,0 +1,8 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+requests==2.32.3
+rapidfuzz==3.9.7
+spotipy==2.24.0
+ytmusicapi==1.7.0
+cryptography>=42.0.0

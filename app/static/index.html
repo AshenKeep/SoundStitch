@@ -1,0 +1,2562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoundStitch</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Ccircle cx='100' cy='100' r='98' fill='%2314102a' stroke='%23c8b6ff' stroke-width='2' stroke-opacity='.4'/%3E%3Ccircle cx='100' cy='100' r='68' fill='none' stroke='%23c8b6ff' stroke-width='1' stroke-opacity='.15'/%3E%3Ccircle cx='100' cy='100' r='36' fill='%231a1030' stroke='%23c8b6ff' stroke-width='1.5' stroke-opacity='.5'/%3E%3Cpath d='M22 100 C28 100 31 72 38 72 C45 72 48 128 56 128 C64 128 67 80 74 80 C81 80 83 100 100 100 C117 100 119 120 126 120 C133 120 136 56 144 56 C152 56 155 110 162 110 C169 110 172 88 178 88' stroke='%23a0c4ff' stroke-width='4' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='100' cy='100' r='7' fill='%23c8b6ff'/%3E%3Ccircle cx='100' cy='100' r='3.5' fill='%2309090e'/%3E%3C/svg%3E">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#1a1a1a;--surface:#222222;--surface2:#2b2b2b;--border:#333333;--border2:#444444;
+  --p:#c8b6ff;--s:#a0c4ff;--p-dim:#7c6db3;--s-dim:#5a7aaa;
+  --green:#4ade80;--yellow:#fbbf24;--red:#f87171;
+  --text:#e6e6e6;--text2:#aaaaaa;--muted:#666666;
+  --spotify:#1db954;--youtube:#ff0000;
+  --mono:'Space Mono',monospace;--sans:'Space Grotesk',sans-serif;
+  --glow-p:0 0 20px #c8b6ff33;--glow-s:0 0 20px #a0c4ff33;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.6;min-height:100vh}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--p-dim)}
+
+/* ── LOGIN ── */
+#login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;
+  background:radial-gradient(ellipse 80% 60% at 50% -10%,#1e1238,var(--bg) 70%)}
+.login-box{width:380px;background:var(--surface);border:1px solid var(--border2);padding:48px 40px;
+  position:relative;overflow:hidden}
+.login-box::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#c8b6ff08 0%,transparent 60%);pointer-events:none}
+.login-logo{display:flex;align-items:center;gap:14px;margin-bottom:32px}
+.login-logo svg{flex-shrink:0}
+.login-wordmark{display:flex;flex-direction:column}
+.login-wordmark .name{font-family:var(--sans);font-size:22px;font-weight:700;color:var(--p);letter-spacing:-.5px}
+.login-wordmark .sub{font-size:11px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.login-error{color:var(--red);font-size:12px;margin-bottom:14px;display:none;padding:8px 12px;background:#f8717115;border:1px solid #f8717133}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+
+/* ── APP SHELL — LEFT SIDEBAR LAYOUT ── */
+#app{display:none;flex-direction:row;min-height:100vh}
+
+/* Sidebar */
+.sidebar{width:220px;min-width:220px;background:var(--surface);border-right:1px solid var(--border);
+  display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;flex-shrink:0}
+.sidebar-logo{display:flex;align-items:center;gap:10px;padding:18px 16px 14px;
+  border-bottom:1px solid var(--border);text-decoration:none}
+.sidebar-logo .wordmark{font-family:var(--sans);font-size:14px;font-weight:700;color:var(--p);letter-spacing:-.3px}
+.sidebar-logo .ver{font-size:9px;color:var(--muted);background:var(--border2);padding:1px 5px;font-family:var(--mono)}
+.sidebar-nav{flex:1;padding:10px 0}
+.nav-section{margin-bottom:4px}
+.nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.10em;color:var(--text2);
+  padding:12px 16px 5px;font-family:var(--mono);font-weight:700;opacity:.7}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 16px;cursor:pointer;
+  font-size:13px;font-weight:500;color:var(--text2);transition:all .15s;border:none;
+  background:none;width:100%;text-align:left;font-family:var(--sans);border-left:2px solid transparent}
+.nav-item:hover{color:var(--text);background:#ffffff08}
+.nav-item.active{color:var(--p);background:#c8b6ff12;border-left-color:var(--p);font-weight:600}
+.nav-item .nav-icon{font-size:13px;width:16px;text-align:center;flex-shrink:0}
+.nav-item .nav-badge{margin-left:auto;background:var(--green);color:#000;font-size:9px;
+  padding:1px 5px;border-radius:2px;font-family:var(--mono);font-weight:700}
+.nav-item .nav-badge.running{background:var(--green);animation:blink 1s infinite}
+.sidebar-footer{padding:12px 16px;border-top:1px solid var(--border)}
+.sign-out{background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--sans);
+  font-size:11px;padding:6px 12px;cursor:pointer;letter-spacing:.05em;transition:all .15s;width:100%;text-align:center}
+.sign-out:hover{color:var(--text);border-color:var(--border2)}
+
+/* Main content */
+.main-content{flex:1;min-width:0;overflow-y:auto;height:100vh}
+main{padding:24px 28px;max-width:1200px}
+.tab{display:none}.tab.active{display:block}
+
+/* ── SECTIONS ── */
+.section{border:1px solid var(--border);background:var(--surface);margin-bottom:14px}
+.section-hd{padding:11px 16px;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:12px;
+  font-weight:600;color:var(--text2);letter-spacing:.04em;display:flex;align-items:center;gap:8px;text-transform:uppercase}
+.section-hd .accent{color:var(--p)}
+.section-body{padding:16px}
+.page-title{font-family:var(--sans);font-size:18px;font-weight:700;color:var(--p);margin-bottom:16px;letter-spacing:-.3px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ── FORMS ── */
+label{font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+input,select,textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;transition:border-color .15s;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--p-dim);box-shadow:0 0 0 2px #c8b6ff18}
+input[type=range]{padding:4px 0;cursor:pointer;accent-color:var(--p)}
+input[type=checkbox]{width:auto;accent-color:var(--p);cursor:pointer;width:15px;height:15px}
+textarea{resize:vertical;min-height:80px;font-size:11px}
+.range-val{color:var(--s);margin-left:6px;font-family:var(--mono)}
+.hint{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── BUTTONS ── */
+.btn{font-family:var(--sans);font-size:12px;font-weight:500;padding:8px 18px;border:none;cursor:pointer;
+  transition:all .15s;display:inline-flex;align-items:center;gap:6px;letter-spacing:.02em}
+.btn-primary{background:var(--p);color:#0a0a14;font-weight:600}
+.btn-primary:hover{background:#d9ccff;box-shadow:var(--glow-p)}
+.btn-primary:disabled{background:var(--p-dim);color:var(--muted);cursor:not-allowed;box-shadow:none}
+.btn-secondary{background:var(--s);color:#0a0a14;font-weight:600}
+.btn-secondary:hover{background:#b8d4ff;box-shadow:var(--glow-s)}
+.btn-ghost{background:none;border:1px solid var(--border2);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--p-dim);color:var(--text)}
+.btn-danger{background:none;border:1px solid #7f1d1d;color:var(--red)}
+.btn-danger:hover{background:#450a0a}
+.btn-success{background:#14532d;color:var(--green);border:1px solid #166534}
+.btn-success:hover{background:#166534}
+.btn-spotify{background:var(--spotify);color:#000;font-weight:700}
+.btn-spotify:hover{background:#1ed760}
+.btn-youtube{background:var(--youtube);color:#fff}
+.btn-youtube:hover{background:#cc0000}
+.btn-sm{padding:4px 10px;font-size:11px}
+.save-row{display:flex;justify-content:flex-end;margin-top:16px;gap:8px}
+
+/* ── BADGES ── */
+.badge{display:inline-flex;align-items:center;gap:4px;padding:2px 7px;font-size:10px;border:1px solid;font-family:var(--mono)}
+.badge-nd{color:#b8b4ff;border-color:#3730a3}.badge-sp{color:var(--spotify);border-color:#166534}
+.badge-yt{color:#f87171;border-color:#991b1b}.badge-m3u{color:var(--muted);border-color:var(--border)}
+
+/* ── CONNECTION CARDS ── */
+.conn-card{border:1px solid var(--border);padding:14px 16px;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;background:var(--surface2);margin-bottom:10px}
+.conn-info{display:flex;align-items:center;gap:12px}
+.conn-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.conn-dot.ok{background:var(--green);box-shadow:0 0 8px var(--green)}
+.conn-dot.off{background:var(--muted)}.conn-dot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+.conn-dot.warn{background:var(--yellow,#f0c060);box-shadow:0 0 8px var(--yellow,#f0c060)}
+.conn-dot.connected{background:var(--green);box-shadow:0 0 8px var(--green)}
+.conn-name{font-weight:600;font-size:13px;color:var(--text)}.conn-sub{color:var(--muted);font-size:11px;font-family:var(--mono)}
+.conn-pick-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:20px 16px;border:1px solid var(--border);background:var(--surface2);cursor:pointer;
+  gap:6px;transition:border-color .15s,background .15s;text-align:center}
+.conn-pick-btn:hover{border-color:var(--p);background:#c8b6ff0d}
+.conn-pick-icon{font-size:11px;font-weight:700;font-family:var(--mono);color:var(--text2);
+  width:36px;height:36px;border:1px solid var(--border);display:flex;align-items:center;
+  justify-content:center;margin-bottom:2px}
+.conn-pick-label{font-size:13px;font-weight:600;color:var(--text)}
+.conn-pick-sub{font-size:11px;color:var(--muted)}
+
+/* ── GROUPS ── */
+.group-card{border:1px solid var(--border);background:var(--surface2);padding:14px 16px;margin-bottom:10px;
+  transition:border-color .15s}
+.group-card:hover{border-color:var(--border2)}
+.group-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.group-name{font-size:14px;font-weight:700;color:var(--p)}
+.group-platforms{display:flex;gap:5px;flex-wrap:wrap}
+
+/* ── CONSOLE / LOG ── */
+.console{background:#06060c;border:1px solid var(--border);height:480px;overflow-y:auto;padding:14px 16px;
+  font-size:11px;line-height:1.9;font-family:var(--mono)}
+.log-line{display:flex;gap:10px}
+.log-ts{color:var(--muted);flex-shrink:0;min-width:55px;opacity:.6}
+.log-INFO{color:var(--text2)}.log-SUCCESS{color:var(--green)}.log-WARN{color:var(--yellow)}
+.log-ERROR{color:var(--red)}.log-DONE{color:var(--p)}.log-DEBUG{color:#2e2a3a}
+.status-pill{font-size:11px;padding:3px 10px;border:1px solid;display:inline-flex;align-items:center;gap:5px;font-family:var(--mono)}
+.status-pill.idle{color:var(--muted);border-color:var(--border)}.status-pill.running{color:var(--green);border-color:var(--green)}
+.pulse{width:5px;height:5px;border-radius:50%;background:var(--green);animation:blink 1s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* ── MODALS ── */
+.modal-overlay{position:fixed;inset:0;background:#000000bb;z-index:200;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);width:600px;max-height:88vh;overflow-y:auto}
+.modal-hd{padding:16px 20px;border-bottom:1px solid var(--border);font-size:14px;font-weight:700;color:var(--p);
+  display:flex;justify-content:space-between;align-items:center}
+.modal-body{padding:20px}.modal-ft{padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.close-x{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+.close-x:hover{color:var(--text)}
+
+/* ── PICKERS ── */
+.pick-list{max-height:220px;overflow-y:auto;border:1px solid var(--border);margin-top:8px}
+.pick-item{padding:9px 12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);transition:background .1s;font-size:12px}
+.pick-item:last-child{border-bottom:none}
+.pick-item:hover{background:#ffffff07}.pick-item.selected{background:#c8b6ff12;border-left:2px solid var(--p)}
+
+/* ── TABLES ── */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{text-align:left;padding:7px 12px;font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);border-bottom:1px solid var(--border)}
+.tbl td{padding:9px 12px;border-bottom:1px solid var(--border);font-size:12px}
+.tbl tr:last-child td{border-bottom:none}.tbl tr:hover td{background:#ffffff04}
+
+/* ── LOG VIEWER ── */
+.log-sidebar{list-style:none}
+.log-sidebar li{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
+  border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;font-size:12px}
+.log-sidebar li:hover{background:#ffffff05}
+.log-sidebar li.selected{background:#c8b6ff0f;border-left:2px solid var(--p)}
+.log-viewer{background:#06060c;border:1px solid var(--border);height:460px;overflow-y:auto;padding:14px 16px;
+  font-size:11px;line-height:1.9;white-space:pre-wrap;color:var(--text2);font-family:var(--mono)}
+
+/* ── UPLOAD ── */
+.drop-zone{border:2px dashed var(--border);padding:28px;text-align:center;color:var(--muted);cursor:pointer;
+  transition:all .2s;position:relative}
+.drop-zone:hover,.drop-zone.over{border-color:var(--p-dim);color:var(--p);background:#c8b6ff08}
+.drop-zone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.drop-icon{font-size:24px;margin-bottom:8px;opacity:.5}
+
+/* ── MASTER / TRACKS ── */
+.track-list{max-height:460px;overflow-y:auto}
+.track-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);
+  font-size:12px;transition:background .1s}
+.track-row:hover{background:#ffffff04}
+.track-num{color:var(--muted);min-width:26px;text-align:right;font-size:11px;font-family:var(--mono);flex-shrink:0}
+.track-info{flex:1;min-width:0}
+.track-title{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-meta{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.track-sources{display:flex;gap:3px;flex-shrink:0}
+.src-dot{width:5px;height:5px;border-radius:50%}
+.src-nd{background:#b8b4ff}.src-sp{background:var(--spotify)}.src-yt{background:#f87171}
+
+/* ── SCHEDULE DISPLAY ── */
+.sched-strip{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+.sched-cell{background:var(--surface2);border:1px solid var(--border);padding:14px 16px}
+.sched-cell .lbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:6px}
+.sched-cell .val{font-size:13px;font-weight:600;color:var(--p);font-family:var(--mono)}
+.sched-cell .val.ok{color:var(--green)}.sched-cell .val.off{color:var(--muted)}
+
+/* ── BACKUP ── */
+.backup-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid var(--border)}
+.backup-row:last-child{border-bottom:none}
+.backup-row:hover{background:#ffffff03}
+.backup-acts{display:flex;gap:6px}
+.log-group-header{font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:8px 8px 2px;pointer-events:none;border-top:1px solid var(--border);margin-top:4px}
+.log-group-header:first-child{border-top:none;margin-top:0}
+
+/* ── MISC ── */
+.empty{text-align:center;color:var(--muted);padding:40px 0;font-size:12px}
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--surface);border:1px solid var(--border2);
+  padding:10px 16px;font-size:12px;opacity:0;transition:opacity .25s;z-index:999;pointer-events:none;
+  font-family:var(--mono)}
+#toast.show{opacity:1}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+.warn-box{background:#1a100a;border:1px solid #78350f;padding:12px 14px;font-size:12px;color:#fcd34d;margin-bottom:12px}
+.info-box{background:#0a1228;border:1px solid #1e3a5f;padding:12px 14px;font-size:12px;color:#86b4ef;margin-bottom:12px}
+
+/* ── RESPONSIVE / MOBILE ── */
+@media (max-width: 768px) {
+  #app { flex-direction: column }
+  .sidebar { width: 100%; min-width: 0; height: auto; flex-direction: row;
+    flex-wrap: wrap; position: relative; border-right: none;
+    border-bottom: 1px solid var(--border) }
+  .sidebar-logo { padding: 10px 14px; border-bottom: none; flex: 0 0 auto }
+  .sidebar-nav { display: flex; flex-direction: row; flex-wrap: wrap;
+    padding: 6px 8px; flex: 1; gap: 0 }
+  .nav-section { display: flex; flex-direction: row; flex-wrap: wrap;
+    align-items: center; margin-bottom: 0 }
+  .nav-section-label { display: none }
+  .nav-item { padding: 6px 10px; font-size: 11px; border-left: none;
+    border-bottom: 2px solid transparent }
+  .nav-item.active { border-left: none; border-bottom-color: var(--p);
+    background: transparent }
+  .sidebar-footer { padding: 8px 10px; border-top: none;
+    border-left: 1px solid var(--border) }
+  .main-content { height: auto; overflow-y: visible }
+  main { padding: 16px 14px }
+  .grid-2, .grid-3 { grid-template-columns: 1fr !important }
+  .grid-2 .field[style*="grid-column:1/3"],
+  .grid-2 .field[style*="grid-column:1/-1"],
+  .grid-3 .field[style*="grid-column:1/3"] { grid-column: 1 !important }
+  .sched-strip { grid-template-columns: 1fr 1fr }
+  .log-sidebar, .log-viewer { height: 240px }
+  div[style*="grid-template-columns:300px"] { grid-template-columns: 1fr !important }
+  div[style*="grid-template-columns:260px"] { grid-template-columns: 1fr !important }
+  .modal { width: 95vw !important; max-height: 90vh }
+  .group-card .group-platforms { flex-wrap: wrap }
+}
+@media (max-width: 480px) {
+  .nav-item span:not(.nav-badge) { display: none }
+  .nav-item .nav-icon { display: block }
+  .nav-item { padding: 8px }
+  .sched-strip { grid-template-columns: 1fr }
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════ LOGIN ════════════════════ -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">
+      <svg width="52" height="52" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="lbg" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#1a1030"/><stop offset="100%" stop-color="#09090e"/>
+          </radialGradient>
+          <linearGradient id="lwg" x1="20" y1="100" x2="180" y2="100" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#a0c4ff" stop-opacity="0.5"/>
+            <stop offset="40%" stop-color="#a0c4ff"/>
+            <stop offset="60%" stop-color="#c8b6ff"/>
+            <stop offset="100%" stop-color="#c8b6ff" stop-opacity="0.5"/>
+          </linearGradient>
+          <filter id="lgp"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <filter id="lgs"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <circle cx="100" cy="100" r="98" fill="url(#lbg)" stroke="#c8b6ff" stroke-width="1.5" stroke-opacity=".25"/>
+        <circle cx="100" cy="100" r="86" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="77" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="68" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="58" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="48" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="36" fill="#14102a" stroke="#c8b6ff" stroke-width="1.2" stroke-opacity=".35"/>
+        <path d="M22 100 C28 100 31 72 38 72 C45 72 48 128 56 128 C64 128 67 80 74 80 C81 80 83 100 100 100 C117 100 119 120 126 120 C133 120 136 56 144 56 C152 56 155 110 162 110 C169 110 172 88 178 88"
+              stroke="url(#lwg)" stroke-width="3.5" stroke-linecap="round" fill="none" filter="url(#lgs)"/>
+        <circle cx="100" cy="100" r="7" fill="#c8b6ff" filter="url(#lgp)"/>
+        <circle cx="100" cy="100" r="3.5" fill="#09090e"/>
+      </svg>
+      <div class="login-wordmark">
+        <div class="name">SoundStitch</div>
+        <div class="sub">Playlist sync engine</div>
+      </div>
+    </div>
+    <div class="login-error" id="login-error">Invalid username or password</div>
+    <div class="field"><label>Username</label><input type="text" id="login-user" autocomplete="username"></div>
+    <div class="field" style="margin-bottom:24px"><label>Password</label><input type="password" id="login-pass" autocomplete="current-password"></div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="doLogin()">Sign In →</button>
+    <div style="margin-top:16px;text-align:center;font-size:11px;color:var(--muted);line-height:1.6">
+      Locked out? Set <code style="color:var(--p);background:#1a1030;padding:1px 5px;border-radius:3px">RESET_TOKEN=yourtoken</code> in docker-compose env,<br>
+      then POST to <code style="color:var(--p);background:#1a1030;padding:1px 5px;border-radius:3px">/api/reset-password</code> with <code style="color:var(--p)">{"token":"yourtoken","new_password":"..."}</code>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ APP ════════════════════ -->
+<div id="app">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <a class="sidebar-logo" href="#">
+      <svg width="26" height="26" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="100" cy="100" r="98" fill="#14102a" stroke="#c8b6ff" stroke-width="2" stroke-opacity=".3"/>
+        <circle cx="100" cy="100" r="86" fill="none" stroke="#c8b6ff" stroke-width="1" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="68" fill="none" stroke="#c8b6ff" stroke-width="1" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="48" fill="none" stroke="#c8b6ff" stroke-width="1" stroke-opacity=".1"/>
+        <circle cx="100" cy="100" r="36" fill="#1a1030" stroke="#c8b6ff" stroke-width="1.5" stroke-opacity=".4"/>
+        <path d="M22 100 C28 100 31 72 38 72 C45 72 48 128 56 128 C64 128 67 80 74 80 C81 80 83 100 100 100 C117 100 119 120 126 120 C133 120 136 56 144 56 C152 56 155 110 162 110 C169 110 172 88 178 88"
+              stroke="#a0c4ff" stroke-width="4" stroke-linecap="round" fill="none" opacity=".9"/>
+        <circle cx="100" cy="100" r="7" fill="#c8b6ff"/>
+        <circle cx="100" cy="100" r="3.5" fill="#09090e"/>
+      </svg>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <span class="wordmark">SoundStitch</span>
+        <span class="ver">v0.6.13</span>
+      </div>
+    </a>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-label">Sync</div>
+        <button class="nav-item active" onclick="showTab('sync',this)">
+          <span class="nav-icon">↺</span> Sync Tasks
+          <span class="nav-badge running" id="nav-sync-badge" style="display:none">●</span>
+        </button>
+
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">Library</div>
+        <button class="nav-item" onclick="showTab('groups',this)">
+          <span class="nav-icon">⊞</span> Groups
+        </button>
+        <button class="nav-item" onclick="showTab('master',this)">
+          <span class="nav-icon">♫</span> Master Playlists
+        </button>
+        <button class="nav-item" onclick="showTab('discovery',this)">
+          <span class="nav-icon">✦</span> Discovery
+        </button>
+        <button class="nav-item" onclick="showTab('playlists',this)">
+          <span class="nav-icon">≡</span> M3U Files
+        </button>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">Connections</div>
+        <button class="nav-item" onclick="showTab('connections',this)">
+          <span class="nav-icon">⬡</span> Services
+        </button>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-label">System</div>
+        <button class="nav-item" onclick="showTab('logs',this)">
+          <span class="nav-icon">📋</span> Logs
+        </button>
+        <button class="nav-item" onclick="showTab('backup',this)">
+          <span class="nav-icon">⬇</span> Backup
+        </button>
+        <button class="nav-item" onclick="showTab('config',this)">
+          <span class="nav-icon">⚙</span> Settings
+        </button>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="sign-out" onclick="doLogout()">Sign out</button>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="main-content">
+  <main>
+
+    <!-- ── SYNC ── -->
+    <div class="tab active" id="tab-sync">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap">
+        <div>
+          <div class="page-title" style="margin-bottom:2px">Sync Tasks</div>
+          <div style="color:var(--muted);font-size:12px">Union-merge all platforms → push back → send missing to Lidarr</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+          <div class="status-pill idle" id="status-badge"><span>Idle</span></div>
+          <button class="btn btn-success" id="sync-all-btn" onclick="startSync(null)">↺ Sync All Groups</button>
+          <button class="btn btn-danger" id="stop-sync-btn" onclick="stopSync()" style="display:none">⏹ Stop</button>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:14px">
+        <div class="section-hd"><span class="accent">●</span> Groups — click to sync individually</div>
+        <div class="section-body" id="sync-group-list"><div class="empty">No groups yet</div></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;text-transform:none;font-size:12px;color:var(--muted)">
+          <input type="checkbox" id="show-debug" onchange="toggleDebug()"> Show debug lines
+        </label>
+      </div>
+      <div class="console" id="console"><div style="color:var(--muted);font-size:11px">// Output appears here when a sync runs...</div></div>
+      <div class="divider"></div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="color:var(--muted);font-size:12px">M3U file import — processes all uploaded files against Navidrome only</div>
+        <button class="btn btn-ghost btn-sm" onclick="startM3uImport()">▶ Run M3U Import</button>
+      </div>
+    </div>
+
+    <!-- ── GROUPS ── -->
+    <div class="tab" id="tab-groups">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+        <div class="page-title" style="margin-bottom:0">Playlist Groups</div>
+        <button class="btn btn-primary btn-sm" onclick="openGroupModal(null)">+ New Group</button>
+      </div>
+      <div id="groups-list"><div class="empty">No groups yet</div></div>
+    </div>
+
+    <!-- ── MASTER ── -->
+    <div class="tab" id="tab-master">
+      <div class="page-title">Master Playlists</div>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:16px">Merged snapshots saved after each sync as CSV and M3U. Download, inspect, or view history.</div>
+      <div style="display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start">
+        <div class="section">
+          <div class="section-hd"><span class="accent">●</span> Groups</div>
+          <div id="master-list"><div class="empty" style="padding:24px">No snapshots yet</div></div>
+        </div>
+        <div>
+          <div class="section" id="master-panel" style="display:none">
+            <div class="section-hd" style="justify-content:space-between">
+              <span id="master-title" style="color:var(--p)">—</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <select id="master-hist-sel" style="display:none;background:var(--bg);border:1px solid var(--border);color:var(--text2);font-family:var(--mono);font-size:11px;padding:3px 7px" onchange="loadHistoryVersion()"></select>
+                <a id="master-dl-csv" href="#" class="btn btn-ghost btn-sm" style="text-decoration:none">↓ CSV</a>
+                <a id="master-dl-m3u" href="#" class="btn btn-ghost btn-sm" style="text-decoration:none">↓ M3U</a>
+              </div>
+            </div>
+            <div id="master-meta" style="padding:8px 16px;border-bottom:1px solid var(--border);color:var(--muted);font-size:11px;font-family:var(--mono);display:flex;align-items:center;justify-content:space-between">
+              <span id="master-meta-text"></span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:10px">
+                <span style="display:flex;align-items:center;gap:4px"><span class="src-dot src-nd"></span> Navidrome</span>
+                <span style="display:flex;align-items:center;gap:4px"><span class="src-dot src-sp"></span> Spotify</span>
+                <span style="display:flex;align-items:center;gap:4px"><span class="src-dot src-yt"></span> YouTube</span>
+              </span>
+            </div>
+            <div class="track-list" id="master-tracks"></div>
+          </div>
+          <div id="master-empty-panel">
+            <div class="section">
+              <div class="section-hd">Track List</div>
+              <div class="empty">Select a group on the left</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SCHEDULE ── -->
+    <div class="tab" id="tab-schedule">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <div class="page-title" style="margin-bottom:2px">Auto Sync Schedules</div>
+          <div style="color:var(--muted);font-size:12px">Multiple schedules — each can target specific groups, run on an interval or at set times on specific days.</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" onclick="runNow()">▶ Run Now</button>
+          <button class="btn btn-primary" onclick="addSchedule()">+ New Schedule</button>
+        </div>
+      </div>
+      <div id="schedules-list"></div>
+    </div>
+
+    <!-- ── CONNECTIONS ── -->
+    <div class="tab" id="tab-connections">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <div class="page-title" style="margin-bottom:2px">Connections</div>
+          <div style="color:var(--muted);font-size:12px">Add the services you want SoundStitch to connect to.</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddConnectionModal()">+ Add Connection</button>
+      </div>
+      <div id="connections-list"></div>
+    </div>
+
+    <!-- ── M3U FILES ── -->
+    <div class="tab" id="tab-playlists">
+      <div class="page-title">M3U / M3U8 Files</div>
+      <div class="section" style="margin-bottom:14px">
+        <div class="section-hd"><span class="accent">↑</span> Upload</div>
+        <div class="section-body">
+          <div class="drop-zone" id="upload-zone">
+            <input type="file" multiple accept=".m3u,.m3u8" onchange="uploadFiles(this.files)">
+            <div class="drop-icon">♪</div>
+            <p>Drop .m3u / .m3u8 files here or click to browse</p>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">●</span> Files on Server</div>
+        <div class="section-body" id="playlist-list"><div class="empty">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- ── BACKUP ── -->
+    <div class="tab" id="tab-backup">
+      <div class="page-title">Backup &amp; Restore</div>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:16px">Backups include config, encryption key, master playlist snapshots, uploaded m3u files, and recent logs.</div>
+      <div class="section" style="margin-bottom:14px">
+        <div class="section-hd">Auto Backup Schedule</div>
+        <div class="section-body">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <input type="checkbox" id="backup-sched-enabled" style="width:auto">
+            <label for="backup-sched-enabled" style="text-transform:none;font-size:13px;color:var(--text);cursor:pointer">Enable automatic backups</label>
+          </div>
+          <div class="grid-2" style="margin-bottom:12px">
+            <div class="field">
+              <label>Mode</label>
+              <select id="backup-sched-mode" onchange="toggleBackupSchedMode()">
+                <option value="interval">Interval — every N hours</option>
+                <option value="timed">Timed — specific days &amp; time</option>
+              </select>
+            </div>
+          </div>
+          <div id="backup-interval-fields" style="margin-bottom:12px">
+            <div class="field" style="max-width:260px">
+              <label>Interval</label>
+              <select id="backup-sched-interval">
+                <option value="6">Every 6 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24" selected>Every 24 hours</option>
+                <option value="48">Every 48 hours</option>
+                <option value="168">Weekly</option>
+              </select>
+            </div>
+          </div>
+          <div id="backup-timed-fields" style="display:none;margin-bottom:12px">
+            <div class="field" style="margin-bottom:10px">
+              <label>Days of week</label>
+              <div style="display:flex;gap:4px;margin-top:6px" id="backup-day-btns">
+                <button type="button" id="bsd-0" onclick="toggleBackupDay(0)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Mon</button>
+                <button type="button" id="bsd-1" onclick="toggleBackupDay(1)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Tue</button>
+                <button type="button" id="bsd-2" onclick="toggleBackupDay(2)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Wed</button>
+                <button type="button" id="bsd-3" onclick="toggleBackupDay(3)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Thu</button>
+                <button type="button" id="bsd-4" onclick="toggleBackupDay(4)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Fri</button>
+                <button type="button" id="bsd-5" onclick="toggleBackupDay(5)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Sat</button>
+                <button type="button" id="bsd-6" onclick="toggleBackupDay(6)" style="padding:3px 8px;font-size:11px;border:1px solid var(--border);background:none;color:var(--muted);cursor:pointer;font-family:var(--mono)">Sun</button>
+              </div>
+            </div>
+            <div class="field" style="max-width:200px">
+              <label>Time</label>
+              <input type="time" id="backup-sched-time" value="02:00">
+            </div>
+          </div>
+          <div id="backup-sched-last" style="font-size:11px;color:var(--muted);font-family:var(--mono);margin-bottom:12px">Last auto backup: —</div>
+          <div class="hint" style="margin-bottom:12px">Auto backups are named <code>auto_backup_YYYYMMDD_HHMMSS.zip</code> and up to 10 are kept.</div>
+          <button class="btn btn-primary" onclick="saveBackupSchedule()">Save Backup Schedule</button>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:14px">
+        <div class="section-hd"><span class="accent">💾</span> Create Backup</div>
+        <div class="section-body">
+          <p style="color:var(--muted);font-size:12px;margin-bottom:12px">Creates a timestamped .zip. Up to 10 manual backups are kept automatically.</p>
+          <button class="btn btn-primary" onclick="createBackup()">Create Backup Now</button>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:14px">
+        <div class="section-hd"><span class="accent">📦</span> Saved Backups</div>
+        <div id="backup-list"><div class="empty">No backups yet</div></div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">↑</span> Restore from Backup</div>
+        <div class="section-body">
+          <div class="warn-box">⚠ Restoring will <strong>overwrite</strong> your current config.json and master snapshots. Create a backup first if needed.</div>
+          <div class="drop-zone" id="restore-zone" style="padding:18px">
+            <input type="file" accept=".zip" onchange="restoreBackup(this.files[0])">
+            <p>Drop a backup .zip here or click to select</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CONFIG ── -->
+    <div class="tab" id="tab-config">
+      <div class="page-title">Configuration</div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">🔐</span> Web UI Auth</div>
+        <div class="section-body grid-2">
+          <div class="field"><label>Username</label><input type="text" id="cfg-auth-user"></div>
+          <div class="field"><label>New Password</label><input type="password" id="cfg-auth-pass" placeholder="Leave blank to keep current"></div>
+          <div class="field" style="grid-column:1/3"><label>Timezone</label>
+            <input type="text" id="cfg-timezone" placeholder="e.g. Australia/Perth, America/New_York, Europe/London">
+            <div class="field-hint">Sets log timestamps. Must match a valid <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones" target="_blank" style="color:#a0c4ff">TZ database name</a>. Restart the container after changing.</div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">♪</span> Navidrome</div>
+        <div class="section-body">
+          <div class="grid-3">
+            <div class="field" style="grid-column:1/3"><label>URL</label><input type="text" id="cfg-nd-url" placeholder="http://192.168.1.100:4533"></div>
+            <div class="field"><label>Username</label><input type="text" id="cfg-nd-user"></div>
+            <div class="field" style="grid-column:1/2"><label>Password</label><input type="password" id="cfg-nd-pass"></div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">📀</span> Lidarr</div>
+        <div class="section-body">
+          <div class="grid-3">
+            <div class="field" style="grid-column:1/3"><label>URL</label><input type="text" id="cfg-li-url" placeholder="http://192.168.1.101:8686"></div>
+            <div class="field"><label>API Key</label><input type="text" id="cfg-li-key"></div>
+            <div class="field"><label>Music Root Path</label><input type="text" id="cfg-li-path" placeholder="/music"></div>
+            <div class="field"><label>Quality Profile ID</label><input type="number" id="cfg-li-quality" min="1"></div>
+            <div class="field"><label>Metadata Profile ID</label><input type="number" id="cfg-li-meta" min="1"></div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">🎸</span> MusicBrainz OAuth</div>
+        <div class="section-body grid-2">
+          <div class="field"><label>Client ID</label><input type="text" id="cfg-mb-id"></div>
+          <div class="field"><label>Client Secret</label><input type="password" id="cfg-mb-secret"></div>
+          <div class="field" style="grid-column:1/-1"><label>Refresh Token</label><input type="text" id="cfg-mb-refresh"></div>
+          <div class="field"><label>App Name</label><input type="text" id="cfg-mb-appname"></div>
+          <div class="field"><label>Contact Email</label><input type="text" id="cfg-mb-contact"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">⏳</span> Cooldowns</div>
+        <div class="section-body grid-2">
+          <div class="field"><label>MusicBrainz <span class="range-val" id="val-mb">1.5s</span></label><input type="range" id="cfg-cd-mb" min="1" max="5" step="0.5" oninput="$('val-mb').textContent=this.value+'s'"></div>
+          <div class="field"><label>Between searches <span class="range-val" id="val-search">30s</span></label><input type="range" id="cfg-cd-search" min="10" max="120" step="5" oninput="$('val-search').textContent=this.value+'s'"></div>
+          <div class="field"><label>After adding artist <span class="range-val" id="val-artist">10s</span></label><input type="range" id="cfg-cd-artist" min="5" max="60" step="5" oninput="$('val-artist').textContent=this.value+'s'"></div>
+          <div class="field"><label>After adding album <span class="range-val" id="val-album">15s</span></label><input type="range" id="cfg-cd-album" min="5" max="60" step="5" oninput="$('val-album').textContent=this.value+'s'"></div>
+          <div class="field" style="grid-column:1/-1"><label>Interactive search cooldown (between Lidarr release searches) <span class="range-val" id="val-isearch">60s</span></label><input type="range" id="cfg-cd-isearch" min="30" max="300" step="10" oninput="$('val-isearch').textContent=this.value+'s'">
+            <div class="field-hint">Prevents rate-limiting your indexer. Applies between each album's interactive search.</div>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">📋</span> Logs</div>
+        <div class="section-body grid-2">
+          <div class="field"><label>Max logs per group folder</label><input type="number" id="cfg-log-max" min="1" max="100" value="10">
+            <div class="field-hint">Oldest logs are deleted automatically when this limit is exceeded.</div>
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:12px;padding-top:20px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:12px;color:var(--text2)">
+              <input type="checkbox" id="cfg-log-verbose" style="width:auto">
+              Verbose logging (include DEBUG messages in logs)
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">🔒</span> Security</div>
+        <div class="section-body grid-2">
+          <div class="field"><label>Session timeout (hours)</label>
+            <input type="number" id="cfg-sec-timeout" min="1" max="720" value="24">
+            <div class="hint">Sessions older than this are automatically invalidated.</div>
+          </div>
+          <div class="field"><label>Login lockout (minutes after 10 failures)</label>
+            <input type="number" id="cfg-sec-lockout" min="5" max="1440" value="60">
+          </div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">🔔</span> Notifications</div>
+        <div class="section-body">
+          <div style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">Notify on</div>
+            <div style="display:flex;flex-wrap:wrap;gap:16px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+                <input type="checkbox" id="cfg-notif-complete" style="width:auto"> Sync completed
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+                <input type="checkbox" id="cfg-notif-error" style="width:auto"> Sync errors / failures
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+                <input type="checkbox" id="cfg-notif-missing" style="width:auto"> Missing tracks summary
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+                <input type="checkbox" id="cfg-notif-stopped" style="width:auto"> Sync stopped by user
+              </label>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">Gotify</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+              <input type="checkbox" id="cfg-gotify-enabled" style="width:auto" onchange="toggleGotifyFields()"> Enable Gotify
+            </label>
+          </div>
+          <div id="gotify-fields" style="display:none">
+            <div class="grid-2">
+              <div class="field" style="grid-column:1/3"><label>Gotify Server URL</label>
+                <input type="text" id="cfg-gotify-url" placeholder="http://gotify.yourdomain.com">
+              </div>
+              <div class="field"><label>App Token</label>
+                <input type="password" id="cfg-gotify-token" placeholder="Token (paste to update)">
+              </div>
+              <div class="field"><label>Priority (1–10)</label>
+                <input type="number" id="cfg-gotify-priority" min="1" max="10" value="5">
+              </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+              <button class="btn btn-ghost btn-sm" id="gotify-test-btn" onclick="testGotifyDirect()">Test Gotify</button>
+              <span id="gotify-test-result" style="font-size:11px;font-family:var(--mono);color:var(--muted)"></span>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.04em">Webhook</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+              <input type="checkbox" id="cfg-webhook-enabled" style="width:auto" onchange="toggleWebhookFields()"> Enable Webhook
+            </label>
+          </div>
+          <div id="webhook-fields" style="display:none">
+            <div class="grid-2">
+              <div class="field" style="grid-column:1/3"><label>URL</label>
+                <input type="text" id="cfg-webhook-url" placeholder="https://ntfy.sh/mytopic  or  https://hooks.slack.com/...">
+              </div>
+              <div class="field"><label>Method</label>
+                <select id="cfg-webhook-method"><option>POST</option><option>PUT</option><option>GET</option></select>
+              </div>
+              <div class="field"><label>Extra Headers (one per line: Key: Value)</label>
+                <textarea id="cfg-webhook-headers" rows="3" placeholder="Authorization: Bearer token&#10;X-Custom: value"></textarea>
+              </div>
+              <div class="field"><label>Body Template (JSON — use {title} {message} {priority})</label>
+                <textarea id="cfg-webhook-body" rows="3" placeholder='{"title":"{title}","message":"{message}"}'></textarea>
+                <div class="hint">Leave blank to use default: <code>{"title":"…","message":"…","priority":…}</code></div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:14px;display:flex;gap:8px">
+            <button class="btn btn-primary" onclick="saveNotifications()">Save Notification Settings</button>
+            <button class="btn btn-ghost" onclick="testNotifications()">Send Test</button>
+          </div>
+          <div id="notif-test-result" style="display:none;margin-top:10px;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);font-size:11px;font-family:var(--mono)"></div>
+        </div>
+      </div>
+      <div class="save-row"><button class="btn btn-primary" onclick="saveConfig()">Save Configuration</button></div>
+    </div>
+
+    <!-- ── LOGS ── -->
+    <div class="tab" id="tab-logs">
+      <div class="page-title">Run History</div>
+      <div style="display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start">
+        <div class="section">
+          <div class="section-hd"><span class="accent">●</span> Runs</div>
+          <ul class="log-sidebar" id="log-list"><li><div class="empty">No logs yet</div></li></ul>
+        </div>
+        <div class="section">
+          <div class="section-hd" style="display:flex;align-items:center;justify-content:space-between">
+            <span><span class="accent">●</span> Log Content</span>
+            <button id="log-download-btn" class="btn btn-ghost btn-sm" style="display:none;font-size:11px;padding:3px 10px" onclick="downloadCurrentLog()" title="Download this log file">⬇ Download</button>
+          </div>
+          <div class="log-viewer" id="log-viewer"><span style="color:var(--muted)">Select a run to view its log</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── DISCOVERY ── -->
+    <div class="tab" id="tab-discovery">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <div class="page-title" style="margin-bottom:2px">Discovery Playlists</div>
+          <div style="color:var(--muted);font-size:12px">Fresh recommendations from Spotify or Last.fm — wipes and rebuilds the Navidrome playlist on each run. Missing tracks are sent to Lidarr. Set Last.fm credentials in the Connections tab. Note: Spotify Discover Weekly and Release Radar are unavailable due to Spotify API restrictions since November 2024.</div>
+        </div>
+        <button class="btn btn-primary" onclick="addDiscoveryGroup()">+ New Discovery Playlist</button>
+      </div>
+
+      <div id="discovery-list"></div>
+    </div>
+
+  </main>
+  </div><!-- /.main-content -->
+</div>
+
+<!-- ════════════════════ GROUP MODAL ════════════════════ -->
+<div class="modal-overlay" id="group-modal">
+  <div class="modal">
+    <div class="modal-hd"><span id="modal-title">New Playlist Group</span><button class="close-x" onclick="closeGroupModal()">×</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="modal-group-id">
+      <div class="field" style="margin-bottom:16px"><label>Group Name</label><input type="text" id="modal-name" placeholder="e.g. Trance"></div>
+      <div class="section" style="margin-bottom:10px">
+        <div class="section-hd"><span class="badge badge-nd">ND</span> Navidrome Playlist</div>
+        <div class="section-body">
+          <div class="field" style="margin-bottom:8px"><label>Playlist Name (created if doesn't exist)</label><input type="text" id="modal-nd"></div>
+          <button class="btn btn-ghost btn-sm" onclick="browseNdPlaylists()">Browse Existing</button>
+          <div id="nd-pl-picker" style="display:none;margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:10px">
+        <div class="section-hd"><span class="badge badge-sp">SP</span> Spotify Playlist</div>
+        <div class="section-body">
+          <div class="field" style="margin-bottom:8px"><label>Playlist ID</label><input type="text" id="modal-sp-id" placeholder="Spotify playlist ID"></div>
+          <button class="btn btn-ghost btn-sm" onclick="browseSpPlaylists()">Browse Your Spotify Playlists</button>
+          <div id="sp-pl-picker" style="display:none;margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="section" style="margin-bottom:10px">
+        <div class="section-hd"><span class="badge badge-yt">YT</span> YouTube Music Playlist</div>
+        <div class="section-body">
+          <div class="field" style="margin-bottom:8px"><label>Playlist ID</label><input type="text" id="modal-yt-id" placeholder="YouTube playlist ID"></div>
+          <button class="btn btn-ghost btn-sm" onclick="browseYtPlaylists()">Browse Your YouTube Playlists</button>
+          <div id="yt-pl-picker" style="display:none;margin-top:8px"></div>
+        </div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="badge badge-m3u">M3U</span> M3U File (optional)</div>
+        <div class="section-body"><div class="field"><label>Filename</label><select id="modal-m3u"><option value="">— None —</option></select></div></div>
+      </div>
+      <div class="section">
+        <div class="section-hd"><span class="accent">📀</span> Lidarr Behaviour</div>
+        <div class="section-body">
+          <div class="field">
+            <label>When a track is missing from your library</label>
+            <select id="modal-lidarr-mode">
+              <option value="album">Grab whole album — download the entire album the track belongs to</option>
+              <option value="track">Track only — search for just the specific missing track</option>
+              <option value="monitor_only">Monitor only — add to Lidarr and wait, don't trigger a search</option>
+            </select>
+            <div class="hint">
+              <strong>Whole album</strong> is best for building a complete library.
+              <strong>Track only</strong> is better for discovery/playlist groups where you only want specific songs.
+              <strong>Monitor only</strong> lets Lidarr find it on its own schedule without immediate action.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeGroupModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveGroup()">Save Group</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+let _showDebug=false;
+
+function toast(msg,type='ok'){const t=$('toast');t.textContent=msg;t.className=`show ${type}`;setTimeout(()=>t.className='',2500)}
+async function api(method,path,body){
+  const opts={method,headers:{}};
+  if(body){opts.body=JSON.stringify(body);opts.headers['Content-Type']='application/json';}
+  const r=await fetch(path,opts);
+  if(r.status===401){showLogin();return null;}
+  return r;
+}
+
+// ── Auth ─────────────────────────────────────────────────────────
+async function doLogin(){
+  const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:$('login-user').value,password:$('login-pass').value})});
+  if(r.ok){showApp();}
+  else{
+    const err=await r.json().catch(()=>({}));
+    const el=$('login-error');
+    el.textContent=err.detail||'Invalid username or password';
+    el.style.display='block';
+  }
+}
+$('login-pass').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin()});
+async function doLogout(){await fetch('/api/logout',{method:'POST'});showLogin();}
+function showLogin(){$('login-screen').style.display='flex';$('app').style.display='none';}
+function showApp(){
+  $('login-screen').style.display='none';$('app').style.display='flex';
+  loadConfig();loadGroups();loadPlaylists();loadLogs();checkRunStatus();
+  updateConnectionStatus();loadSchedule();loadMaster();loadBackups();loadDiscovery();loadLastfmConfig();
+}
+
+// ── Nav ──────────────────────────────────────────────────────────
+function showTab(name,btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  $(`tab-${name}`).classList.add('active');
+  if(btn)btn.classList.add('active');
+  if(name==='playlists')loadPlaylists();
+  if(name==='logs')loadLogs();
+  if(name==='config')loadConfig();
+  if(name==='groups')loadGroups();
+  if(name==='connections'){loadConfig();updateConnectionStatus();loadLastfmConfig();}
+  if(name==='schedule'){loadSchedule();loadGroups();}
+  if(name==='master')loadMaster();
+  if(name==='backup')loadBackups();
+  if(name==='discovery'){loadDiscovery();loadLastfmConfig();}
+}
+
+// ── Connections ───────────────────────────────────────────────────
+function setDot(id,state){const d=$(id);if(!d)return;d.className='conn-dot '+(state==='ok'?'ok':state==='err'?'err':state==='warn'?'warn':'off')}
+// ── Connections — Arr-suite style ─────────────────────────────────
+const CONN_DEFS = {
+  navidrome: {label:'Navidrome',     icon:'ND', color:'var(--p)'},
+  spotify:   {label:'Spotify',       icon:'SP', color:'var(--spotify)'},
+  youtube:   {label:'YouTube Music', icon:'YT', color:'var(--youtube)'},
+  lastfm:    {label:'Last.fm',       icon:'LFM',color:'#d51007'},
+};
+
+async function updateConnectionStatus(){
+  const r=await api('GET','/api/config');if(!r||!r.ok)return;
+  const conf=await r.json();
+
+  // Determine per-service status
+  const statuses={};
+
+  // Navidrome
+  if(conf.navidrome?.url){
+    statuses.navidrome={dot:'ok',sub:conf.navidrome.url};
+  } else {
+    statuses.navidrome={dot:'off',sub:'Not configured'};
+  }
+
+  // Spotify
+  const hasSpToken=!!(conf.spotify?.refresh_token||conf.spotify?.access_token);
+  if(!conf.spotify?.enabled||!hasSpToken){
+    statuses.spotify={dot:'off',sub:'Not connected'};
+  } else {
+    statuses.spotify={dot:'warn',sub:'Checking…'};
+    try{
+      const sc=await api('GET','/api/spotify/check');
+      const sd=sc?await sc.json():null;
+      if(sd?.ok){
+        const mins=Math.round((sd.token_expires_in||0)/60);
+        statuses.spotify={dot:'ok',sub:`Connected${mins>0?' (token valid ~'+mins+'m)':''}`};
+      } else {
+        statuses.spotify={dot:'err',sub:sd?.reason||'Token invalid',reauth:true,reauth_msg:sd?.reason||''};
+      }
+    }catch(e){statuses.spotify={dot:'warn',sub:'Could not check'};}
+  }
+
+  // YouTube
+  const method=conf.youtube?.method||'headers';
+  const hasYt=!!(conf.youtube?.access_token||conf.youtube?.headers_raw);
+  if(!conf.youtube?.enabled||!hasYt){
+    statuses.youtube={dot:'off',sub:'Not connected'};
+  } else {
+    statuses.youtube={dot:'warn',sub:'Checking…'};
+    try{
+      const yc=await api('GET','/api/youtube/check');
+      const yd=yc?await yc.json():null;
+      if(yd?.ok){
+        statuses.youtube={dot:'ok',sub:`Connected (${yd.method||method})`};
+      } else {
+        statuses.youtube={dot:'err',sub:yd?.reason||'Auth failed',reauth:true,reauth_msg:yd?.reason||''};
+      }
+    }catch(e){statuses.youtube={dot:'warn',sub:'Could not check'};}
+  }
+
+  // Last.fm — read from lastfm config endpoint
+  try{
+    const lr=await api('GET','/api/lastfm/config');
+    const lc=lr?await lr.json():null;
+    if(lc?.api_key&&lc?.username){
+      statuses.lastfm={dot:'ok',sub:'Configured — '+lc.username};
+    } else {
+      statuses.lastfm={dot:'off',sub:'Not configured'};
+    }
+  }catch(e){statuses.lastfm={dot:'off',sub:'Not configured'};}
+
+  // Update modal status indicators
+  for(const [svc,st] of Object.entries(statuses)){
+    const dot=$(svc[0]==='l'?'lfm-dot':`${svc.slice(0,2)}-dot`);
+    const sub=$(svc[0]==='l'?'lfm-sub':`${svc.slice(0,2)}-sub`);
+    if(dot) setDot(dot.id, st.dot);
+    if(sub) sub.textContent=st.sub;
+  }
+  if($('sp-connect-btn')) $('sp-connect-btn').style.display=statuses.spotify.dot==='ok'?'none':'';
+  if($('sp-disconnect-btn')) $('sp-disconnect-btn').style.display=statuses.spotify.dot==='ok'?'':'none';
+  if($('sp-reauth-banner')) $('sp-reauth-banner').style.display=statuses.spotify.reauth?'':'none';
+  if($('sp-reauth-msg')&&statuses.spotify.reauth_msg) $('sp-reauth-msg').textContent=statuses.spotify.reauth_msg;
+  if($('yt-connect-btn')) $('yt-connect-btn').style.display=statuses.youtube.dot==='ok'?'none':'';
+  if($('yt-disconnect-btn')) $('yt-disconnect-btn').style.display=statuses.youtube.dot==='ok'?'':'none';
+  if($('yt-reauth-banner')) $('yt-reauth-banner').style.display=statuses.youtube.reauth?'':'none';
+  if($('yt-reauth-msg')&&statuses.youtube.reauth_msg) $('yt-reauth-msg').textContent=statuses.youtube.reauth_msg;
+  if($('yt-method-headers')) $('yt-method-headers').checked=conf.youtube?.method!=='oauth';
+  if($('yt-method-oauth'))   $('yt-method-oauth').checked=conf.youtube?.method==='oauth';
+  toggleYtMethod();
+  if($('cfg-sp-id'))       $('cfg-sp-id').value=conf.spotify?.client_id||'';
+  if($('cfg-sp-secret'))   $('cfg-sp-secret').value='';
+  if($('cfg-sp-redirect')) $('cfg-sp-redirect').value=conf.spotify?.redirect_uri||'';
+  if($('cfg-yt-id'))       $('cfg-yt-id').value=conf.youtube?.client_id||'';
+  if($('cfg-yt-secret'))   $('cfg-yt-secret').value='';
+  if($('cfg-yt-headers'))  $('cfg-yt-headers').value=conf.youtube?.headers_raw||'';
+
+  // Render connections list
+  renderConnectionsList(conf, statuses);
+}
+
+function renderConnectionsList(conf, statuses){
+  const el=$('connections-list');
+  if(!el)return;
+  const configured=[];
+  if(conf.navidrome?.url)        configured.push('navidrome');
+  if(conf.spotify?.enabled)      configured.push('spotify');
+  if(conf.youtube?.enabled)      configured.push('youtube');
+  // lastfm — check from statuses
+  if(statuses?.lastfm?.dot==='ok') configured.push('lastfm');
+
+  if(!configured.length){
+    el.innerHTML='<div class="empty" style="padding:40px;text-align:center">No connections yet — click + Add Connection to get started</div>';
+    return;
+  }
+
+  el.innerHTML=configured.map(svc=>{
+    const def=CONN_DEFS[svc];
+    const st=statuses?.[svc]||{dot:'off',sub:''};
+    const dotClass=st.dot==='ok'?'ok':st.dot==='err'?'err':st.dot==='warn'?'warn':'off';
+    // Action buttons per service
+    let actions='';
+    if(svc==='spotify'){
+      actions=st.dot==='ok'
+        ?`<button class="btn btn-danger btn-sm" onclick="disconnectSpotify()">Disconnect</button>`
+        :`<button class="btn btn-spotify btn-sm" onclick="openConnConfig('spotify')">Connect</button>`;
+    } else if(svc==='youtube'){
+      actions=st.dot==='ok'
+        ?`<button class="btn btn-danger btn-sm" onclick="disconnectYoutube()">Disconnect</button>`
+        :`<button class="btn btn-youtube btn-sm" onclick="openConnConfig('youtube')">Configure</button>`;
+    }
+    return `<div class="conn-card">
+      <div class="conn-info">
+        <div class="conn-dot ${dotClass}"></div>
+        <div>
+          <div class="conn-name">${def.label}</div>
+          <div class="conn-sub">${esc(st.sub)}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="openConnConfig('${svc}')">Configure</button>
+        ${actions}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openAddConnectionModal(){$('add-conn-modal').classList.add('open');}
+
+function openConnConfig(svc){
+  $('add-conn-modal').classList.remove('open');
+  $(`conn-${svc}-modal`).classList.add('open');
+  updateConnectionStatus();
+  if(svc==='lastfm')loadLastfmConfig();
+  if(svc==='navidrome'){
+    api('GET','/api/config').then(r=>r.json()).then(conf=>{
+      $('cfg-nd-url').value=conf.navidrome?.url||'';
+      $('cfg-nd-user').value=conf.navidrome?.user||'';
+      $('cfg-nd-pass').value='';
+    });
+  }
+}
+
+function closeConnModal(svc){
+  $(`conn-${svc}-modal`).classList.remove('open');
+  updateConnectionStatus();
+}
+
+async function saveConnNavidrome(){
+  const r=await api('GET','/api/config');const conf=await r.json();
+  conf.navidrome.url=$('cfg-nd-url').value.trim();
+  conf.navidrome.user=$('cfg-nd-user').value.trim();
+  const pw=$('cfg-nd-pass').value;if(pw)conf.navidrome.password=pw;
+  const s=await api('POST','/api/config',conf);
+  if(s&&s.ok){toast('Navidrome saved');closeConnModal('navidrome');}else toast('Save failed','err');
+}
+
+async function saveConnSpotify(){
+  const r=await api('GET','/api/config');const conf=await r.json();
+  conf.spotify.client_id=$('cfg-sp-id').value.trim();
+  conf.spotify.redirect_uri=$('cfg-sp-redirect').value.trim();
+  const sec=$('cfg-sp-secret').value;
+  if(sec&&sec!=='••••••••')conf.spotify.client_secret=sec;
+  const s=await api('POST','/api/config',conf);
+  if(s&&s.ok){toast('Spotify settings saved');updateConnectionStatus();}else toast('Save failed','err');
+}
+
+// saveConnectionConfig kept for backward compat (called from Settings tab save)
+async function saveConnectionConfig(){
+  const r=await api('GET','/api/config');const conf=await r.json();
+  const sp_s=$('cfg-sp-secret')?.value;const yt_s=$('cfg-yt-secret')?.value;
+  if($('cfg-sp-id'))conf.spotify.client_id=$('cfg-sp-id').value;
+  if($('cfg-sp-redirect'))conf.spotify.redirect_uri=$('cfg-sp-redirect').value;
+  if(sp_s&&sp_s!=='••••••••')conf.spotify.client_secret=sp_s;
+  if($('cfg-yt-id'))conf.youtube.client_id=$('cfg-yt-id').value;
+  conf.youtube.method=document.querySelector('input[name=yt-method]:checked')?.value||'headers';
+  if(yt_s&&yt_s!=='••••••••')conf.youtube.client_secret=yt_s;
+  const s=await api('POST','/api/config',conf);
+  if(s&&s.ok){toast('Connection settings saved');updateConnectionStatus();}else toast('Save failed','err');
+}
+function toggleYtMethod(){
+  const m=document.querySelector('input[name=yt-method]:checked')?.value||'headers';
+  $('yt-headers-fields').style.display=m==='headers'?'':'none';
+  $('yt-oauth-fields').style.display=m==='oauth'?'':'none';
+}
+async function testNavidrome(){
+  const r=await api('GET','/api/navidrome/playlists');
+  if(r&&r.ok){toast('Navidrome connected ✓');setDot('nd-dot','ok');}
+  else{toast('Cannot reach Navidrome','err');setDot('nd-dot','err');}
+}
+async function connectSpotify(){
+  const r=await api('GET','/api/spotify/auth-url');if(!r||!r.ok){toast('Save Spotify credentials first','err');return;}
+  const{url}=await r.json();
+  const w=window.open(url,'sp-auth','width=500,height=700');
+  window.addEventListener('message',async e=>{if(e.data?.spotify==='connected'){toast('Spotify connected ✓');updateConnectionStatus();w?.close();}
+    else if(e.data?.spotify==='error'){toast('Spotify auth failed','err');}},{once:true});
+}
+async function disconnectSpotify(){await api('POST','/api/spotify/disconnect');toast('Spotify disconnected');updateConnectionStatus();}
+async function connectYoutube(){
+  const method=document.querySelector('input[name=yt-method]:checked')?.value||'headers';
+  if(method==='headers'){toast('Enter headers and click Save Headers','err');return;}
+  const r=await api('GET','/api/youtube/auth-url');if(!r||!r.ok){toast('Save YouTube credentials first','err');return;}
+  const{url}=await r.json();
+  const w=window.open(url,'yt-auth','width=500,height=700');
+  window.addEventListener('message',async e=>{if(e.data?.youtube==='connected'){toast('YouTube connected ✓');updateConnectionStatus();w?.close();}
+    else if(e.data?.youtube==='error'){toast('YouTube auth failed','err');}},{once:true});
+}
+async function disconnectYoutube(){await api('POST','/api/youtube/disconnect');toast('YouTube disconnected');updateConnectionStatus();}
+async function saveYtHeaders(){
+  const headers=$('cfg-yt-headers').value.trim();
+  const errEl=$('yt-headers-error');
+  errEl.style.display='none';
+  if(!headers){toast('Paste headers first','err');return;}
+  const r=await api('POST','/api/youtube/headers',{headers_raw:headers});
+  if(r&&r.ok){
+    const body=await r.json();
+    if(body.ok){
+      const cr=await api('GET','/api/config');const conf=await cr.json();
+      conf.youtube.enabled=true;conf.youtube.method='headers';
+      await api('POST','/api/config',conf);
+      errEl.style.display='none';
+      toast('YouTube Music connected ✓');updateConnectionStatus();
+    }else{
+      errEl.textContent='⚠ '+( body.reason||'Failed to parse headers');
+      errEl.style.display='block';
+      toast('Headers rejected — see error below','err');
+    }
+  }else{
+    let reason='Failed to save headers';
+    try{const b=await r.json();reason=b.reason||reason;}catch(e){}
+    errEl.textContent='⚠ '+reason;
+    errEl.style.display='block';
+    toast('Headers rejected — see error below','err');
+  }
+}
+function promptYtHeadersRefresh(){
+  // Clear the textarea and scroll it into view so user knows what to do
+  const ta=$('cfg-yt-headers');
+  ta.value='';
+  ta.placeholder='Paste fresh headers here — see instructions above';
+  ta.scrollIntoView({behavior:'smooth',block:'center'});
+  ta.focus();
+  toast('Clear your browser cookies cache if headers still fail after re-pasting','warn',6000);
+}
+
+
+// ── Config ────────────────────────────────────────────────────────
+async function loadConfig(){
+  const r=await api('GET','/api/config');if(!r||!r.ok)return;const c=await r.json();
+  $('cfg-auth-user').value=c.auth.username||'';$('cfg-auth-pass').value='';$('cfg-timezone').value=(c.general&&c.general.timezone)||'';
+  $('cfg-nd-url').value=c.navidrome.url||'';$('cfg-nd-user').value=c.navidrome.user||'';$('cfg-nd-pass').value='';
+  $('cfg-li-url').value=c.lidarr.url||'';$('cfg-li-key').value=c.lidarr.api_key||'';
+  $('cfg-li-path').value=c.lidarr.music_path||'';$('cfg-li-quality').value=c.lidarr.quality_id||1;$('cfg-li-meta').value=c.lidarr.meta_id||1;
+  $('cfg-mb-id').value=c.musicbrainz.client_id||'';$('cfg-mb-secret').value='';
+  $('cfg-mb-refresh').value=c.musicbrainz.refresh_token||'';$('cfg-mb-appname').value=c.musicbrainz.app_name||'';$('cfg-mb-contact').value=c.musicbrainz.contact||'';
+  const cd=c.cooldowns;
+  $('cfg-cd-mb').value=cd.mb_cooldown||1.5;$('val-mb').textContent=(cd.mb_cooldown||1.5)+'s';
+  $('cfg-cd-search').value=cd.between_searches||30;$('val-search').textContent=(cd.between_searches||30)+'s';
+  $('cfg-cd-artist').value=cd.between_artists||10;$('val-artist').textContent=(cd.between_artists||10)+'s';
+  $('cfg-cd-album').value=cd.between_albums||15;$('val-album').textContent=(cd.between_albums||15)+'s';
+  const is=cd.interactive_search||60;$('cfg-cd-isearch').value=is;$('val-isearch').textContent=is+'s';
+  const lg=c.logs||{};$('cfg-log-max').value=lg.max_per_group||10;$('cfg-log-verbose').checked=lg.verbose!==false;
+  // Security
+  const sec=c.security||{};
+  $('cfg-sec-timeout').value=sec.session_timeout_hours||24;
+  $('cfg-sec-lockout').value=sec.lockout_minutes||60;
+  // Load notifications separately so token masking is consistent
+  const rn=await api('GET','/api/notifications');
+  if(rn&&rn.ok){
+    const n=await rn.json();
+    $('cfg-notif-complete').checked=n.on_complete!==false;
+    $('cfg-notif-error').checked=n.on_error!==false;
+    $('cfg-notif-missing').checked=n.on_missing!==false;
+    $('cfg-notif-stopped').checked=!!n.on_stopped;
+    const g=n.gotify||{};
+    $('cfg-gotify-enabled').checked=!!g.enabled;
+    $('cfg-gotify-url').value=g.url||'';
+    $('cfg-gotify-token').value=g.token?'••••••••':'';
+    $('cfg-gotify-priority').value=g.priority||5;
+    toggleGotifyFields();
+    const w=n.webhook||{};
+    $('cfg-webhook-enabled').checked=!!w.enabled;
+    $('cfg-webhook-url').value=w.url||'';
+    $('cfg-webhook-method').value=w.method||'POST';
+    $('cfg-webhook-headers').value=w.headers||'';
+    $('cfg-webhook-body').value=w.body_template||'';
+    toggleWebhookFields();
+  }
+}
+async function saveConfig(){
+  const r=await api('GET','/api/config');const conf=await r.json();
+  const up=$('cfg-auth-pass').value;const np=$('cfg-nd-pass').value;const ms=$('cfg-mb-secret').value;
+  conf.auth.username=$('cfg-auth-user').value;if(up)conf.auth.password=up;if(!conf.general)conf.general={};conf.general.timezone=$('cfg-timezone').value.trim();
+  conf.navidrome.url=$('cfg-nd-url').value;conf.navidrome.user=$('cfg-nd-user').value;if(np)conf.navidrome.password=np;
+  conf.lidarr.url=$('cfg-li-url').value;conf.lidarr.api_key=$('cfg-li-key').value;conf.lidarr.music_path=$('cfg-li-path').value;
+  conf.lidarr.quality_id=parseInt($('cfg-li-quality').value)||1;conf.lidarr.meta_id=parseInt($('cfg-li-meta').value)||1;
+  conf.musicbrainz.client_id=$('cfg-mb-id').value;if(ms&&ms!=='••••••••')conf.musicbrainz.client_secret=ms;
+  conf.musicbrainz.refresh_token=$('cfg-mb-refresh').value;conf.musicbrainz.app_name=$('cfg-mb-appname').value;conf.musicbrainz.contact=$('cfg-mb-contact').value;
+  conf.cooldowns={mb_cooldown:parseFloat($('cfg-cd-mb').value),between_searches:parseInt($('cfg-cd-search').value),between_artists:parseInt($('cfg-cd-artist').value),between_albums:parseInt($('cfg-cd-album').value),interactive_search:parseInt($('cfg-cd-isearch').value)};
+  conf.logs={max_per_group:parseInt($('cfg-log-max').value)||10,verbose:$('cfg-log-verbose').checked};
+  conf.security={session_timeout_hours:parseInt($('cfg-sec-timeout').value)||24,max_login_attempts:10,lockout_minutes:parseInt($('cfg-sec-lockout').value)||60};
+  const s=await api('POST','/api/config',conf);
+  if(s&&s.ok){toast('Config saved ✓');$('cfg-auth-pass').value='';$('cfg-nd-pass').value='';$('cfg-mb-secret').value='';}else toast('Save failed','err');
+}
+
+// ── Notifications ─────────────────────────────────────────────────
+function toggleGotifyFields(){
+  $('gotify-fields').style.display=$('cfg-gotify-enabled').checked?'block':'none';
+}
+function toggleWebhookFields(){
+  $('webhook-fields').style.display=$('cfg-webhook-enabled').checked?'block':'none';
+}
+async function saveNotifications(){
+  const tok=$('cfg-gotify-token').value;
+  const payload={
+    on_complete:$('cfg-notif-complete').checked,
+    on_error:$('cfg-notif-error').checked,
+    on_missing:$('cfg-notif-missing').checked,
+    on_stopped:$('cfg-notif-stopped').checked,
+    gotify:{
+      enabled:$('cfg-gotify-enabled').checked,
+      url:$('cfg-gotify-url').value.trim(),
+      token:tok==='••••••••'?'••••••••':tok,  // server restores masked token
+      priority:parseInt($('cfg-gotify-priority').value)||5,
+    },
+    webhook:{
+      enabled:$('cfg-webhook-enabled').checked,
+      url:$('cfg-webhook-url').value.trim(),
+      method:$('cfg-webhook-method').value,
+      headers:$('cfg-webhook-headers').value.trim(),
+      body_template:$('cfg-webhook-body').value.trim(),
+    },
+  };
+  const r=await api('POST','/api/notifications',payload);
+  if(r&&r.ok){toast('Notification settings saved ✓');}else toast('Save failed','err');
+}
+async function testNotifications(){
+  const btn=event.target;btn.disabled=true;btn.textContent='Sending…';
+  const r=await api('POST','/api/notifications/test');
+  btn.disabled=false;btn.textContent='Send Test';
+  if(!r||!r.ok){toast('Test failed','err');return;}
+  const d=await r.json();
+  const el=$('notif-test-result');
+  el.style.display='block';
+  el.textContent=Object.entries(d.results).map(([k,v])=>`${k}: ${v}`).join('\n');
+  toast('Test sent — check results below');
+}
+async function testGotifyDirect(){
+  // Send URL + token directly from the form without touching saved config
+  // This avoids the mask/restore problem entirely
+  const btn=$('gotify-test-btn');
+  const resultEl=$('gotify-test-result');
+  const url=$('cfg-gotify-url').value.trim();
+  const tok=$('cfg-gotify-token').value.trim();
+  const priority=parseInt($('cfg-gotify-priority').value)||5;
+  if(!url){resultEl.textContent='Enter a Gotify URL first';resultEl.style.color='var(--yellow)';return;}
+  if(!tok||tok==='••••••••'){
+    // Token is masked — save first then test via the API
+    btn.disabled=true;btn.textContent='Saving…';
+    await saveNotifications();
+    btn.textContent='Testing…';
+    const r=await api('POST','/api/notifications/test');
+    btn.disabled=false;btn.textContent='Test Gotify';
+    if(!r||!r.ok){resultEl.textContent='Request failed';resultEl.style.color='var(--red)';return;}
+    const d=await r.json();
+    const g=d.results?.gotify||'no result';
+    resultEl.textContent=g==='sent'?'Sent OK':g;
+    resultEl.style.color=g==='sent'?'var(--green)':'var(--red)';
+    return;
+  }
+  // Token visible in form — test directly without saving
+  btn.disabled=true;btn.textContent='Testing…';
+  resultEl.textContent='Sending…';resultEl.style.color='var(--muted)';
+  const r=await api('POST','/api/notifications/test-gotify',{url,token:tok,priority});
+  btn.disabled=false;btn.textContent='Test Gotify';
+  if(!r||!r.ok){resultEl.textContent='Request failed';resultEl.style.color='var(--red)';return;}
+  const d=await r.json();
+  resultEl.textContent=d.ok?'Sent OK — check your Gotify app':('Error: '+(d.detail||d.error||'unknown'));
+  resultEl.style.color=d.ok?'var(--green)':'var(--red)';
+}
+
+// ── Groups ────────────────────────────────────────────────────────
+let _groups=[];
+async function loadGroups(){
+  const r=await api('GET','/api/groups');if(!r||!r.ok)return;
+  _groups=await r.json();
+  // Clear schedule cache so fresh data from server is used
+  Object.keys(_groupSchedules).forEach(k=>delete _groupSchedules[k]);
+  renderGroups();renderSyncGroupList();renderScheduleGroups();
+}
+// ── Per-group schedule state (keyed by group id) ─────────────────
+// Stored in memory so day toggles survive re-renders
+const _groupSchedules = {};
+
+function _getGS(gid) {
+  if (!_groupSchedules[gid]) {
+    // Look in both regular groups and discovery groups
+    const g = _groups.find(x => x.id === gid) || _discoveryGroups.find(x => x.id === gid);
+    const s = g?.schedule || {};
+    // Discovery groups default to weekly; regular groups default to 6h
+    const isDiscovery = g?.type === 'discovery';
+    _groupSchedules[gid] = {
+      enabled:          !!s.enabled,
+      mode:             s.mode || 'interval',
+      interval_minutes: s.interval_minutes || (isDiscovery ? 10080 : 360),
+      days:             s.days ? [...s.days] : [0,1,2,3,4,5,6],
+      times:            s.times ? [...s.times] : ['06:00'],
+      last_run:         s.last_run || null,
+      next_run:         s.next_run || null,
+    };
+  }
+  return _groupSchedules[gid];
+}
+
+function renderGroups(){
+  const el=$('groups-list');
+  if(!_groups.length){el.innerHTML='<div class="empty">No groups yet — click New Group to create one</div>';return;}
+  el.innerHTML=_groups.map(g=>{
+    const s=_getGS(g.id);
+    const isInterval=s.mode==='interval';
+    const DAY_LABELS=['M','T','W','T','F','S','S'];
+    const schedStatus=!s.enabled
+      ? '<span style="color:var(--muted);font-size:11px">No schedule</span>'
+      : isInterval
+        ? `<span style="color:var(--green);font-size:11px">Every ${s.interval_minutes>=60?s.interval_minutes/60+'h':s.interval_minutes+'m'}${s.next_run?' · next '+s.next_run.slice(0,16):''}</span>`
+        : `<span style="color:var(--green);font-size:11px">Timed${s.next_run?' · next '+s.next_run.slice(0,16):''}</span>`;
+    const modeLabel={album:'whole album',track:'track only',monitor_only:'monitor only'}[g.lidarr_mode]||'whole album';
+    const dayBtns=DAY_LABELS.map((d,di)=>{
+      const on=s.days.includes(di);
+      return `<button type="button" onclick="toggleGSD('${g.id}',${di})" style="width:24px;height:24px;font-size:10px;font-weight:600;cursor:pointer;font-family:var(--mono);border:1px solid ${on?'var(--p)':'var(--border)'};background:${on?'#c8b6ff22':'none'};color:${on?'var(--p)':'var(--muted)'}">${d}</button>`;
+    }).join('');
+    const intervalOpts=[60,180,360,720,1440].map(m=>`<option value="${m}" ${s.interval_minutes==m?'selected':''}>${m===60?'1h':m/60+'h'}</option>`).join('');
+    return `<div class="group-card">
+      <div class="group-card-header">
+        <div class="group-name">${esc(g.name)}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-secondary btn-sm" onclick="startSync(['${g.id}'])">Sync</button>
+          <button class="btn btn-ghost btn-sm" onclick="openGroupModal('${g.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteGroup('${g.id}')">Delete</button>
+        </div>
+      </div>
+      <div class="group-platforms">
+        ${g.navidrome?`<span class="badge badge-nd">ND: ${esc(g.navidrome)}</span>`:''}
+        ${g.spotify_id?`<span class="badge badge-sp">Spotify</span>`:''}
+        ${g.youtube_id?`<span class="badge badge-yt">YouTube</span>`:''}
+        ${g.m3u_file?`<span class="badge badge-m3u">m3u: ${esc(g.m3u_file)}</span>`:''}
+        <span class="badge" style="color:var(--muted);border-color:var(--border)">Lidarr: ${modeLabel}</span>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Auto Sync</span>
+          ${schedStatus}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);text-transform:none;cursor:pointer">
+            <input type="checkbox" ${s.enabled?'checked':''} style="width:auto" onchange="_gsSet('${g.id}','enabled',this.checked)"> Enabled
+          </label>
+          <select style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono)" onchange="_gsSet('${g.id}','mode',this.value);renderGroups()">
+            <option value="interval" ${isInterval?'selected':''}>Interval</option>
+            <option value="timed"    ${!isInterval?'selected':''}>Timed</option>
+          </select>
+          ${isInterval?`<select style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono)" onchange="_gsSet('${g.id}','interval_minutes',parseInt(this.value))">${intervalOpts}</select>`
+            :`<div style="display:flex;gap:3px">${dayBtns}</div>
+            <input type="time" value="${s.times[0]||'06:00'}" style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono);width:110px" onchange="_gsSetTime('${g.id}',this.value)">`}
+          <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="saveGroupSchedule('${g.id}')">Save</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function _gsSet(gid,key,val){_getGS(gid)[key]=val;}
+function _gsSetTime(gid,val){_getGS(gid).times=[val];}
+function toggleGSD(gid,di){
+  const s=_getGS(gid);
+  const idx=s.days.indexOf(di);
+  if(idx>=0)s.days.splice(idx,1);else s.days.push(di);
+  s.days.sort((a,b)=>a-b);
+  renderGroups();
+}
+async function saveGroupSchedule(id){
+  const s=_getGS(id);
+  const r=await api('POST',`/api/groups/${id}/schedule`,{
+    enabled:s.enabled,mode:s.mode,
+    interval_minutes:s.interval_minutes,
+    days:s.days,times:s.times,
+  });
+  if(r&&r.ok){
+    // Update local group data so status line reflects saved state
+    const g=_groups.find(x=>x.id===id);
+    if(g){const d=await r.json();g.schedule=d;delete _groupSchedules[id];}
+    toast('Schedule saved');renderGroups();
+  } else toast('Save failed','err');
+}
+function renderSyncGroupList(){
+  const el=$('sync-group-list');
+  if(!_groups.length){el.innerHTML='<div class="empty">No groups yet — create some in the Groups tab</div>';return;}
+  el.innerHTML='<div style="display:flex;flex-wrap:wrap;gap:6px">'+_groups.map(g=>`<button class="btn btn-ghost btn-sm" onclick="startSync(['${g.id}'])">↺ ${esc(g.name)}</button>`).join('')+'</div>';
+}
+function renderScheduleGroups(){
+  // Schedule cards build their own group dropdowns inline — just re-render if loaded
+  if(_schedules.length) renderSchedules();
+}
+async function deleteGroup(id){
+  if(!confirm('Delete this group? The Navidrome playlist will not be deleted.'))return;
+  await api('DELETE',`/api/groups/${id}`);toast('Group deleted');loadGroups();
+}
+
+// ── Group Modal ───────────────────────────────────────────────────
+async function openGroupModal(id){
+  ['modal-group-id','modal-name','modal-nd','modal-sp-id','modal-yt-id'].forEach(x=>$(x).value='');
+  ['nd-pl-picker','sp-pl-picker','yt-pl-picker'].forEach(x=>{$(x).style.display='none';$(x).innerHTML='';});
+  $('modal-title').textContent=id?'Edit Playlist Group':'New Playlist Group';
+  $('modal-lidarr-mode').value='album';
+  const pr=await api('GET','/api/playlists');const files=pr&&pr.ok?await pr.json():[];
+  $('modal-m3u').innerHTML='<option value="">— None —</option>'+files.map(f=>`<option value="${f.name}">${f.name}</option>`).join('');
+  if(id){const g=_groups.find(x=>x.id===id);if(g){$('modal-group-id').value=g.id;$('modal-name').value=g.name;$('modal-nd').value=g.navidrome||'';$('modal-sp-id').value=g.spotify_id||'';$('modal-yt-id').value=g.youtube_id||'';if(g.m3u_file)$('modal-m3u').value=g.m3u_file;$('modal-lidarr-mode').value=g.lidarr_mode||'album';}}
+  $('group-modal').classList.add('open');
+}
+function closeGroupModal(){$('group-modal').classList.remove('open');}
+async function saveGroup(){
+  const id=$('modal-group-id').value;
+  const body={name:$('modal-name').value,navidrome:$('modal-nd').value,spotify_id:$('modal-sp-id').value,youtube_id:$('modal-yt-id').value,m3u_file:$('modal-m3u').value,lidarr_mode:$('modal-lidarr-mode').value||'album'};
+  const r=id?await api('PUT',`/api/groups/${id}`,body):await api('POST','/api/groups',body);
+  if(r&&r.ok){toast(id?'Group updated ✓':'Group created ✓');closeGroupModal();loadGroups();}else toast('Save failed','err');
+}
+async function browseNdPlaylists(){
+  const r=await api('GET','/api/navidrome/playlists');
+  if(!r||!r.ok){const err=await r?.json().catch(()=>({}));toast(err.detail||'Cannot reach Navidrome','err');return;}
+  renderPicker('nd-pl-picker',await r.json(),'modal-nd','name',null);
+}
+async function browseSpPlaylists(){
+  const r=await api('GET','/api/spotify/playlists');
+  if(!r||!r.ok){const err=await r?.json().catch(()=>({}));toast(err.detail||'Spotify not connected','err');return;}
+  renderPicker('sp-pl-picker',await r.json(),'modal-sp-id','id','name');
+}
+async function browseYtPlaylists(){
+  const picker=$('yt-pl-picker');
+  picker.style.display='';picker.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px 0">Loading playlists…</div>';
+  const r=await api('GET','/api/youtube/playlists');
+  if(!r||!r.ok){
+    const err=await r?.json().catch(()=>({}));
+    picker.innerHTML=`<div style="color:var(--red);font-size:11px;padding:8px 0">⚠ ${err.detail||'YouTube not connected or no playlists found. You can paste the playlist ID manually above.'}</div>`;
+    return;
+  }
+  const playlists=await r.json();
+  if(!playlists.length){
+    picker.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px 0">No playlists found. Paste the playlist ID manually above.</div>';
+    return;
+  }
+  renderPicker('yt-pl-picker',playlists,'modal-yt-id','id','name');
+}
+function renderPicker(cid,items,inputId,valField,lblField){
+  const el=$(cid);el.style.display='';
+  el.innerHTML='<div class="pick-list">'+items.map(p=>{
+    const v=p[valField],l=lblField?p[lblField]:p[valField],cnt=p.tracks?` <span style="color:var(--muted);font-size:10px;font-family:var(--mono)">${p.tracks}</span>`:'';
+    return `<div class="pick-item" onclick="pickItem('${esc(String(v))}','${inputId}','${cid}',this)"><span>${esc(String(l))}</span>${cnt}</div>`;
+  }).join('')+'</div>';
+}
+function pickItem(val,inputId,cid,el){$(inputId).value=val;$(cid).querySelectorAll('.pick-item').forEach(x=>x.classList.remove('selected'));el.classList.add('selected');}
+
+// ── Sync ──────────────────────────────────────────────────────────
+let _es=null;
+let _statusPoll=null;
+
+async function checkRunStatus(){
+  const r=await api('GET','/api/sync/status');if(!r||!r.ok)return;const d=await r.json();
+  if(d.running){setRunning(true,'sync');return;}
+  const ri=await api('GET','/api/import/status');if(!ri||!ri.ok)return;const di=await ri.json();
+  if(di.running)setRunning(true,'import');
+}
+function setRunning(running,mode='sync'){
+  const btn=$('sync-all-btn');const badge=$('status-badge');const stopBtn=$('stop-sync-btn');
+  const navBadge=$('nav-sync-badge');
+  btn.disabled=running;
+  stopBtn.style.display=running?'':'none';
+  if(navBadge)navBadge.style.display=running?'':'none';
+  if(running){
+    badge.className='status-pill running';badge.innerHTML='<div class="pulse"></div><span>Running</span>';
+    btn.textContent='Running...';
+    listenStream(mode==='import'?'/api/import/stream':'/api/sync/stream');
+  }else{
+    badge.className='status-pill idle';badge.innerHTML='<span>Idle</span>';
+    btn.innerHTML='↺ Sync All Groups';
+    if(_statusPoll){clearInterval(_statusPoll);_statusPoll=null;}
+  }
+}
+async function stopSync(){
+  const stopBtn=$('stop-sync-btn');
+  stopBtn.disabled=true;stopBtn.textContent='Stopping…';
+  const r=await api('POST','/api/sync/stop');
+  if(!r||!r.ok){stopBtn.disabled=false;stopBtn.textContent='⏹ Stop';}
+}
+async function startSync(groupIds){
+  if($('sync-all-btn').disabled)return;
+  const r=await api('POST','/api/sync/start',{group_ids:groupIds});
+  if(!r)return;if(r.status===409){toast('Already running','err');return;}
+  if(r.ok){$('console').innerHTML='';setRunning(true,'sync');goSync();}
+}
+async function startM3uImport(){
+  const r=await api('POST','/api/import/start');if(!r)return;if(r.status===409){toast('Already running','err');return;}
+  if(r.ok){$('console').innerHTML='';setRunning(true,'import');goSync();}
+}
+function goSync(){
+  // Navigate to the Sync Engine tab via the sidebar
+  const syncBtn=document.querySelector('.nav-item[onclick*="\'sync\'"]');
+  showTab('sync', syncBtn);
+}
+function toggleDebug(){_showDebug=$('show-debug').checked;}
+function listenStream(url){
+  if(_es){_es.close();_es=null;}
+  _es=new EventSource(url);
+  _es.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    if(d.level==='DEBUG'&&!_showDebug)return;
+    const con=$('console');
+    const div=document.createElement('div');div.className='log-line';
+    div.innerHTML=`<span class="log-ts">${d.ts}</span><span class="log-${d.level}">${esc(d.msg)}</span>`;
+    con.appendChild(div);con.scrollTop=con.scrollHeight;
+    if(d.level==='DONE'){_es.close();_es=null;setRunning(false);loadLogs();loadMaster();}
+  };
+  _es.onerror=()=>{
+    // SSE dropped — fall back to polling so UI doesn't stay frozen
+    if(_es){_es.close();_es=null;}
+    if(!_statusPoll){
+      _statusPoll=setInterval(async()=>{
+        const r=await api('GET','/api/sync/status');
+        if(!r||!r.ok)return;
+        const d=await r.json();
+        if(!d.running){
+          clearInterval(_statusPoll);_statusPoll=null;
+          setRunning(false);loadLogs();loadMaster();
+        }
+      },2000);
+    }
+  };
+}
+
+// ── Master Playlists ──────────────────────────────────────────────
+let _currentGroupId=null;
+let _currentTracks=[];
+
+async function loadMaster(){
+  const r=await api('GET','/api/master');if(!r||!r.ok)return;
+  const snapshots=await r.json();const el=$('master-list');
+  if(!snapshots.length){el.innerHTML='<div class="empty" style="padding:24px">No snapshots yet — run a sync</div>';return;}
+  el.innerHTML=snapshots.map(s=>`<div class="pick-item" onclick="selectMasterGroup('${s.group_id}','${esc(s.group_name)}',this)" style="flex-direction:column;align-items:flex-start">
+    <div style="color:var(--p);font-weight:600">${esc(s.group_name)}</div>
+    <div style="color:var(--muted);font-size:11px;font-family:var(--mono)">${s.track_count} tracks · ${s.saved_at||'—'}</div>
+  </div>`).join('');
+}
+async function selectMasterGroup(groupId,groupName,el){
+  document.querySelectorAll('#master-list .pick-item').forEach(x=>x.classList.remove('selected'));
+  el.classList.add('selected');
+  _currentGroupId=groupId;
+  $('master-title').textContent=groupName;
+  $('master-panel').style.display='';
+  $('master-empty-panel').style.display='none';
+  $('master-dl-csv').href=`/api/master/${groupId}/download/csv`;
+  $('master-dl-m3u').href=`/api/master/${groupId}/download/m3u`;
+  const hr=await api('GET',`/api/master/${groupId}/history`);
+  const history=hr&&hr.ok?await hr.json():[];
+  const sel=$('master-hist-sel');
+  if(history.length>1){
+    sel.style.display='';
+    sel.innerHTML=history.map(h=>`<option value="${h.filename}">${h.saved_at} (${h.track_count})</option>`).join('');
+    sel.onchange=()=>loadHistoryVersion(groupId,sel.value);
+  }else{sel.style.display='none';}
+  await loadMasterTracks(groupId);
+}
+async function loadMasterTracks(groupId){
+  const r=await api('GET',`/api/master/${groupId}/tracks`);if(!r||!r.ok)return;
+  const data=await r.json();
+  $('master-meta-text').textContent=`${data.track_count} tracks · saved ${data.saved_at||'—'}`;
+  _currentTracks=data.tracks||[];
+  renderMasterTracks(_currentTracks);
+}
+async function loadHistoryVersion(groupId,filename){
+  const r=await api('GET',`/api/master/${groupId}/history/${filename}/tracks`);
+  if(!r||!r.ok)return;
+  const data=await r.json();
+  $('master-meta-text').textContent=`${data.track_count} tracks · saved ${data.saved_at||'—'} (history)`;
+  _currentTracks=data.tracks||[];
+  renderMasterTracks(_currentTracks);
+}
+function renderMasterTracks(tracks){
+  const el=$('master-tracks');
+  if(!tracks.length){el.innerHTML='<div class="empty">No tracks</div>';return;}
+  el.innerHTML=tracks.map((t,i)=>{
+    const sources=(t.source||'').split(',');
+    const dots=`${sources.includes('navidrome')?'<div class="src-dot src-nd" title="Navidrome"></div>':''}${sources.includes('spotify')?'<div class="src-dot src-sp" title="Spotify"></div>':''}${sources.includes('youtube')?'<div class="src-dot src-yt" title="YouTube"></div>':''}`;
+    const album=t.album?`<span style="color:var(--muted);font-size:10px"> · ${esc(t.album)}</span>`:'';
+    return `<div class="track-row">
+      <div class="track-num">${i+1}</div>
+      <div class="track-info">
+        <div class="track-title">${esc(t.title||'?')}${album}</div>
+        <div class="track-meta">${esc(t.artist||'?')}</div>
+      </div>
+      <div class="track-sources">${dots}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Schedule ──────────────────────────────────────────────────────
+// ── Schedule ──────────────────────────────────────────────────────
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+let _schedules = [];
+
+async function loadSchedule(){
+  const r=await api('GET','/api/schedules');if(!r||!r.ok)return;
+  _schedules=await r.json();
+  renderSchedules();
+}
+function renderSchedules(){
+  const el=$('schedules-list');
+  if(!_schedules.length){
+    el.innerHTML='<div class="section"><div class="empty" style="padding:32px">No schedules yet — click New Schedule</div></div>';
+    return;
+  }
+  el.innerHTML=_schedules.map((s,i)=>renderScheduleCard(s,i)).join('');
+}
+function renderScheduleCard(s,i){
+  const selectedGroups = s.group_ids || [];
+  const gCheckboxes = _groups.length === 0
+    ? '<div style="color:var(--muted);font-size:11px">No groups configured yet</div>'
+    : `<label style="display:flex;align-items:center;gap:7px;margin-bottom:5px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+        <input type="checkbox" ${selectedGroups.length===0?'checked':''} onchange="setSchedAllGroups(${i},this.checked)" style="width:auto"> All groups
+      </label>`
+      + _groups.map(g=>`<label style="display:flex;align-items:center;gap:7px;margin-bottom:4px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+        <input type="checkbox" value="${g.id}" ${selectedGroups.includes(g.id)?'checked':''} onchange="toggleSchedGroup(${i},'${g.id}',this.checked)" style="width:auto"> ${esc(g.name)}
+      </label>`).join('');
+  const isInterval=s.mode!=='timed';
+  const nextStr=s.next_run?`<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">next: ${s.next_run}</span>`:'';
+  const lastStr=s.last_run?`<span style="color:var(--muted);font-size:10px;font-family:var(--mono)">last: ${s.last_run}</span>`:'';
+  const dayBtns=DAYS.map((d,di)=>`<button type="button" onclick="toggleSchedDay(${i},${di})" style="padding:3px 7px;font-size:11px;border:1px solid ${(s.days||[]).includes(di)?'var(--p)':'var(--border)'};background:${(s.days||[]).includes(di)?'#c8b6ff22':'none'};color:${(s.days||[]).includes(di)?'var(--p)':'var(--muted)'};cursor:pointer;font-family:var(--mono)">${d}</button>`).join('');
+  const timesList=(s.times||['06:00']).map((t,ti)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+    <input type="time" value="${t}" onchange="updateSchedTime(${i},${ti},this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 8px">
+    <button onclick="removeSchedTime(${i},${ti})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px" title="Remove">×</button>
+  </div>`).join('');
+  return `<div class="section" style="margin-bottom:12px">
+    <div class="section-hd" style="justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" ${s.enabled?'checked':''} onchange="toggleSchedEnabled(${i})" style="width:auto">
+        <input type="text" value="${esc(s.label||'Schedule')}" onchange="updateSchedLabel(${i},this.value)"
+          style="background:none;border:none;color:var(--text);font-size:12px;font-weight:600;font-family:var(--sans);padding:0;width:180px">
+        <span style="color:${s.enabled?'var(--green)':'var(--muted)'};font-size:10px">${s.enabled?'● ENABLED':'○ DISABLED'}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        ${nextStr} ${lastStr}
+        <button class="btn btn-primary btn-sm" onclick="saveSchedules()">Save</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteSchedule('${s.id}')">Delete</button>
+      </div>
+    </div>
+    <div class="section-body">
+      <div class="grid-2" style="margin-bottom:14px">
+        <div class="field">
+          <label>Groups</label>
+          <div style="margin-top:6px">${gCheckboxes}</div>
+          <div class="hint">Leave All groups checked to sync everything</div>
+        </div>
+        <div class="field">
+          <label>Mode</label>
+          <select onchange="updateSchedMode(${i},this.value)">
+            <option value="interval" ${isInterval?'selected':''}>Interval — every N minutes</option>
+            <option value="timed"    ${!isInterval?'selected':''}>Timed — specific days &amp; times</option>
+          </select>
+        </div>
+      </div>
+      <div id="sched-interval-fields-${i}" style="display:${isInterval?'block':'none'}">
+        <div class="field" style="max-width:260px">
+          <label>Interval</label>
+          <select onchange="updateSchedInterval(${i},this.value)">
+            ${[60,180,360,720,1440].map(m=>`<option value="${m}" ${s.interval_minutes==m?'selected':''}>${m<60?m+'min':m==60?'1 hour':m/60+' hours'}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div id="sched-timed-fields-${i}" style="display:${!isInterval?'block':'none'}">
+        <div class="field" style="margin-bottom:10px">
+          <label>Days of week</label>
+          <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">${dayBtns}</div>
+        </div>
+        <div class="field">
+          <label>Times</label>
+          <div id="sched-times-${i}">${timesList}</div>
+          <button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="addSchedTime(${i})">+ Add time</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleSchedEnabled(i){_schedules[i].enabled=!_schedules[i].enabled;renderSchedules();}
+function updateSchedLabel(i,v){_schedules[i].label=v;}
+function setSchedAllGroups(i,checked){if(checked){_schedules[i].group_ids=null;}renderSchedules();}
+function toggleSchedGroup(i,gid,checked){
+  let ids=_schedules[i].group_ids?[..._schedules[i].group_ids]:[];
+  if(checked){if(!ids.includes(gid))ids.push(gid);}
+  else{ids=ids.filter(x=>x!==gid);}
+  _schedules[i].group_ids=ids.length?ids:null;
+  // Un-check "All groups" visually handled by re-render only if needed
+}
+function updateSchedInterval(i,v){_schedules[i].interval_minutes=parseInt(v);}
+function updateSchedMode(i,v){
+  _schedules[i].mode=v;
+  $(`sched-interval-fields-${i}`).style.display=v==='interval'?'block':'none';
+  $(`sched-timed-fields-${i}`).style.display=v==='timed'?'block':'none';
+}
+function toggleSchedDay(i,d){
+  const days=_schedules[i].days||[];
+  const idx=days.indexOf(d);
+  if(idx>=0)days.splice(idx,1);else days.push(d);
+  _schedules[i].days=days.sort((a,b)=>a-b);
+  renderSchedules();
+}
+function updateSchedTime(i,ti,v){(_schedules[i].times=_schedules[i].times||[])[ti]=v;}
+function addSchedTime(i){(_schedules[i].times=_schedules[i].times||[]).push('08:00');renderSchedules();}
+function removeSchedTime(i,ti){(_schedules[i].times=_schedules[i].times||[]).splice(ti,1);renderSchedules();}
+async function saveSchedules(){
+  const r=await api('POST','/api/schedules',_schedules);
+  if(r&&r.ok){const d=await r.json();_schedules=d;toast('Schedules saved ✓');renderSchedules();}
+  else toast('Save failed','err');
+}
+async function addSchedule(){
+  const r=await api('POST','/api/schedules/new');
+  if(r&&r.ok){const s=await r.json();_schedules.push(s);renderSchedules();toast('Schedule added');}
+}
+async function deleteSchedule(id){
+  if(!confirm('Delete this schedule?'))return;
+  const r=await api('DELETE',`/api/schedules/${id}`);
+  if(r&&r.ok){_schedules=_schedules.filter(s=>s.id!==id);renderSchedules();toast('Deleted');}
+}
+function schedEnableChange(){} // legacy stub
+async function saveSchedule(){await saveSchedules();} // legacy stub
+async function runNow(){
+  const r=await api('POST','/api/schedule/run-now');
+  if(!r)return;if(r.status===409){toast('Already running','err');return;}
+  if(r.ok){toast('Sync started');$('console').innerHTML='';setRunning(true,'sync');goSync();}else toast('Failed to start','err');
+}
+
+// ── Playlists ──────────────────────────────────────────────────────
+async function loadPlaylists(){
+  const r=await api('GET','/api/playlists');if(!r||!r.ok)return;
+  const files=await r.json();const el=$('playlist-list');
+  if(!files.length){el.innerHTML='<div class="empty">No playlist files uploaded yet</div>';return;}
+  el.innerHTML=`<table class="tbl"><thead><tr><th>Filename</th><th>Size</th><th>Modified</th><th></th></tr></thead><tbody>`+
+    files.map(f=>`<tr><td style="color:var(--p);font-family:var(--mono)">${f.name}</td><td style="color:var(--muted);font-family:var(--mono)">${(f.size/1024).toFixed(1)} KB</td><td style="color:var(--muted);font-family:var(--mono)">${f.modified}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="deletePlaylist('${f.name}')">Delete</button></td></tr>`).join('')+`</tbody></table>`;
+}
+async function uploadFiles(files){
+  if(!files.length)return;
+  const fd=new FormData();for(const f of files)fd.append('files',f);
+  const r=await fetch('/api/playlists/upload',{method:'POST',body:fd});
+  if(r.ok){const d=await r.json();toast(`Uploaded: ${d.saved.join(', ')}`);loadPlaylists();}else toast('Upload failed','err');
+}
+async function deletePlaylist(name){
+  if(!confirm(`Delete "${name}"?`))return;
+  const r=await api('DELETE',`/api/playlists/${encodeURIComponent(name)}`);
+  if(r&&r.ok){toast('Deleted');loadPlaylists();}else toast('Delete failed','err');
+}
+const uz=$('upload-zone');
+uz.addEventListener('dragover',e=>{e.preventDefault();uz.classList.add('over');});
+uz.addEventListener('dragleave',()=>uz.classList.remove('over'));
+uz.addEventListener('drop',e=>{e.preventDefault();uz.classList.remove('over');uploadFiles(e.dataTransfer.files);});
+
+// ── Backup ────────────────────────────────────────────────────────
+// Track which backup days are selected (persists across re-renders)
+const _backupDays = new Set([0,1,2,3,4,5,6]);
+function toggleBackupDay(i){
+  if(_backupDays.has(i)){_backupDays.delete(i);}else{_backupDays.add(i);}
+  _renderBackupDays();
+}
+function _renderBackupDays(){
+  for(let i=0;i<7;i++){
+    const btn=$(`bsd-${i}`);
+    if(!btn)continue;
+    const on=_backupDays.has(i);
+    btn.style.borderColor=on?'var(--p)':'var(--border)';
+    btn.style.background=on?'#c8b6ff22':'none';
+    btn.style.color=on?'var(--p)':'var(--muted)';
+  }
+}
+function toggleBackupSchedMode(){
+  const m=$('backup-sched-mode').value;
+  $('backup-interval-fields').style.display=m==='interval'?'block':'none';
+  $('backup-timed-fields').style.display=m==='timed'?'block':'none';
+}
+async function loadBackups(){
+  const rs=await api('GET','/api/backup-schedule');
+  if(rs&&rs.ok){
+    const bs=await rs.json();
+    $('backup-sched-enabled').checked=!!bs.enabled;
+    $('backup-sched-mode').value=bs.mode||'interval';
+    $('backup-sched-interval').value=bs.interval_hours||24;
+    if(bs.time)$('backup-sched-time').value=bs.time;
+    toggleBackupSchedMode();
+    // Restore saved days
+    _backupDays.clear();
+    (bs.days||[0,1,2,3,4,5,6]).forEach(d=>_backupDays.add(d));
+    _renderBackupDays();
+    $('backup-sched-last').textContent='Last auto backup: '+(bs.last_backup||'Never');
+  }
+  const r=await api('GET','/api/backups');if(!r||!r.ok)return;
+  const backups=await r.json();const el=$('backup-list');
+  if(!backups.length){el.innerHTML='<div class="empty">No backups yet</div>';return;}
+  el.innerHTML=backups.map(b=>`<div class="backup-row">
+    <div>
+      <div style="color:${b.name.startsWith('auto_')?'var(--s)':'var(--p)'};font-family:var(--mono)">
+        ${b.name.startsWith('auto_')?'<span style="font-size:10px;opacity:.7">[auto] </span>':''}${b.name}
+      </div>
+      <div style="color:var(--muted);font-size:11px;font-family:var(--mono)">${b.created} · ${(b.size/1024).toFixed(1)} KB</div>
+    </div>
+    <div class="backup-acts">
+      <a href="/api/backups/${b.name}" download class="btn btn-ghost btn-sm" style="text-decoration:none">↓ Download</a>
+      <button class="btn btn-danger btn-sm" onclick="deleteBackup('${b.name}')">Delete</button>
+    </div></div>`).join('');
+}
+async function saveBackupSchedule(){
+  const days=[...Array(7).keys()].filter(i=>_backupDays.has(i));
+  const body={
+    enabled:$('backup-sched-enabled').checked,
+    mode:$('backup-sched-mode').value,
+    interval_hours:parseInt($('backup-sched-interval').value)||24,
+    days:days.length?days:[0,1,2,3,4,5,6],
+    time:$('backup-sched-time').value||'02:00',
+  };
+  const r=await api('POST','/api/backup-schedule',body);
+  if(r&&r.ok){toast('Backup schedule saved');loadBackups();}else toast('Save failed','err');
+}
+async function createBackup(){
+  const r=await api('POST','/api/backups/create');
+  if(r&&r.ok){const d=await r.json();toast(`Backup created: ${d.name}`);loadBackups();}else toast('Backup failed','err');
+}
+async function deleteBackup(name){
+  if(!confirm(`Delete backup "${name}"?`))return;
+  await api('DELETE',`/api/backups/${name}`);toast('Backup deleted');loadBackups();
+}
+async function restoreBackup(file){
+  if(!file)return;if(!confirm('This will overwrite your current config and master snapshots. Are you sure?'))return;
+  const fd=new FormData();fd.append('file',file);
+  const r=await fetch('/api/backups/restore',{method:'POST',body:fd});
+  if(r.ok){const d=await r.json();toast(`Restored ${d.restored.length} item(s) ✓`);loadConfig();loadMaster();}
+  else{const err=await r.json().catch(()=>({}));toast(err.detail||'Restore failed','err');}
+}
+const rz=$('restore-zone');
+rz.addEventListener('dragover',e=>{e.preventDefault();rz.classList.add('over');});
+rz.addEventListener('dragleave',()=>rz.classList.remove('over'));
+rz.addEventListener('drop',e=>{e.preventDefault();rz.classList.remove('over');if(e.dataTransfer.files[0])restoreBackup(e.dataTransfer.files[0]);});
+
+// ── Logs ──────────────────────────────────────────────────────────
+let _currentLogPath = null;
+
+async function loadLogs(){
+  const r=await api('GET','/api/logs');if(!r||!r.ok)return;
+  const logs=await r.json();const el=$('log-list');
+  if(!logs.length){el.innerHTML='<li><div class="empty">No runs yet</div></li>';return;}
+  const groups={};
+  for(const l of logs){
+    const g=l.group||'general';
+    if(!groups[g])groups[g]=[];
+    groups[g].push(l);
+  }
+  let html='';
+  for(const [grp,items] of Object.entries(groups)){
+    html+=`<li class="log-group-header">${esc(grp)}</li>`;
+    for(const l of items){
+      const kb=(l.size/1024).toFixed(1);
+      const displayName=l.name.replace('sync_','').replace('.log','').replace(/_/g,' ');
+      html+=`<li onclick="loadLog('${esc(l.path)}',this)" style="justify-content:space-between">
+        <div>
+          <div style="color:var(--p);font-family:var(--mono);font-size:11px">${esc(displayName)}</div>
+          <div style="color:var(--muted);font-size:10px;font-family:var(--mono)">${l.modified} · ${kb} KB</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;flex-shrink:0;margin-left:6px"
+          onclick="event.stopPropagation();downloadLog('${esc(l.path)}','${esc(l.name)}')" title="Download log">⬇</button>
+      </li>`;
+    }
+  }
+  el.innerHTML=html;
+}
+async function loadLog(path,el){
+  document.querySelectorAll('.log-sidebar li').forEach(l=>l.classList.remove('selected'));
+  if(el)el.classList.add('selected');
+  _currentLogPath=path;
+  $('log-download-btn').style.display='';
+  const r=await api('GET',`/api/logs/${encodeURIComponent(path)}`);if(!r||!r.ok)return;
+  const d=await r.json();
+  const viewer=$('log-viewer');
+  viewer.textContent=d.content;
+  viewer.scrollTop=viewer.scrollHeight;
+}
+async function downloadLog(path, filename){
+  const r=await fetch(`/api/logs/${encodeURIComponent(path)}?download=true`,{credentials:'include'});
+  if(!r.ok){toast('Download failed','err');return;}
+  const blob=await r.blob();
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename||path.split('/').pop();
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+function downloadCurrentLog(){
+  if(!_currentLogPath)return;
+  downloadLog(_currentLogPath, _currentLogPath.split('/').pop());
+}
+
+// ── Utils ─────────────────────────────────────────────────────────
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ── Discovery ─────────────────────────────────────────────────────
+const DISC_SOURCES = {
+  spotify_playlist:        'Spotify — Specific playlist',
+  spotify_discover_weekly: 'Spotify — Discover Weekly (unavailable)',
+  spotify_release_radar:   'Spotify — Release Radar (unavailable)',
+  lastfm_loved:            'Last.fm — Loved tracks',
+  lastfm_similar:          'Last.fm — Similar artist discovery',
+  lastfm_recommended:      'Last.fm — Similar artist discovery',
+  lastfm_tag:              'Last.fm — Tag/genre top tracks',
+};
+let _discoveryGroups = [];
+
+async function loadDiscovery(){
+  const r=await api('GET','/api/discovery/groups');if(!r||!r.ok)return;
+  _discoveryGroups=await r.json();
+  // Clear schedule cache for discovery groups so fresh server data is used
+  _discoveryGroups.forEach(g=>delete _groupSchedules[g.id]);
+  renderDiscovery();
+}
+function renderDiscovery(){
+  const el=$('discovery-list');
+  if(!_discoveryGroups.length){
+    el.innerHTML='<div class="section"><div class="empty" style="padding:32px">No discovery playlists yet — click New Discovery Playlist to add one</div></div>';
+    return;
+  }
+  el.innerHTML=_discoveryGroups.map(g=>renderDiscoveryCard(g)).join('');
+  // Wire mode dropdowns to show/hide interval vs timed controls
+  _discoveryGroups.forEach(g=>{
+    const modeEl=document.querySelector(`[onchange*="_gsSet('${g.id}','mode'"]`);
+    if(modeEl)modeEl.addEventListener('change',()=>renderDiscovery());
+  });
+}
+function renderDiscoveryCard(g){
+  const sourceLabel=DISC_SOURCES[g.discovery_source]||g.discovery_source||'Unknown source';
+  const isLastfm=g.discovery_source?.startsWith('lastfm');
+  const s=_getGS(g.id);
+  const isInterval=s.mode==='interval';
+  const DAY_LABELS=['M','T','W','T','F','S','S'];
+
+  // Friendly interval label for discovery (days/weeks/months)
+  function discIntervalLabel(mins){
+    if(mins>=43200) return Math.round(mins/43200)+'mo';
+    if(mins>=10080) return Math.round(mins/10080)+'w';
+    if(mins>=1440)  return Math.round(mins/1440)+'d';
+    return mins+'min';
+  }
+  const schedStatus=!s.enabled
+    ? '<span style="color:var(--muted);font-size:11px">No schedule</span>'
+    : isInterval
+      ? `<span style="color:var(--green);font-size:11px">Every ${discIntervalLabel(s.interval_minutes)}${s.next_run?' · next '+s.next_run.slice(0,16):''}</span>`
+      : `<span style="color:var(--green);font-size:11px">Timed${s.next_run?' · next '+s.next_run.slice(0,16):''}</span>`;
+
+  // Discovery-appropriate interval options: daily to monthly
+  const discIntervals=[
+    [1440,'Daily'],
+    [2880,'Every 2 days'],
+    [5040,'Every 3.5 days'],
+    [7200,'Every 5 days'],
+    [10080,'Weekly'],
+    [20160,'Fortnightly'],
+    [30240,'Every 3 weeks'],
+    [43200,'Monthly'],
+  ];
+  const intervalOpts=discIntervals.map(([m,label])=>
+    `<option value="${m}" ${s.interval_minutes==m?'selected':''}>${label}</option>`).join('');
+
+  const dayBtns=DAY_LABELS.map((d,di)=>{
+    const on=s.days.includes(di);
+    return `<button type="button" onclick="toggleGSD('${g.id}',${di})" style="width:24px;height:24px;font-size:10px;font-weight:600;cursor:pointer;font-family:var(--mono);border:1px solid ${on?'var(--p)':'var(--border)'};background:${on?'#c8b6ff22':'none'};color:${on?'var(--p)':'var(--muted)'}">${d}</button>`;
+  }).join('');
+
+  return `<div class="section" style="margin-bottom:12px">
+    <div class="section-hd" style="justify-content:space-between">
+      <span style="color:var(--p)">${esc(g.name)}</span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="runDiscoverySync('${g.id}')">Sync Now</button>
+        <button class="btn btn-ghost btn-sm" onclick="editDiscoveryGroup('${g.id}')">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteDiscoveryGroup('${g.id}')">Delete</button>
+      </div>
+    </div>
+    <div class="section-body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Source</div>
+        <div style="font-size:12px;color:var(--text)">${sourceLabel}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Navidrome Playlist</div>
+        <div style="font-size:12px;color:var(--text);font-family:var(--mono)">${esc(g.discovery_nd_playlist||g.name)}</div></div>
+      <div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Tracks</div>
+        <div style="font-size:12px;color:var(--text)">${g.discovery_limit||30} per run</div></div>
+      ${isLastfm&&g.lastfm_username?`<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Last.fm User</div><div style="font-size:12px;color:var(--text);font-family:var(--mono)">${esc(g.lastfm_username)}</div></div>`:''}
+      ${isLastfm&&g.lastfm_tag?`<div><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Tag</div><div style="font-size:12px;color:var(--text);font-family:var(--mono)">${esc(g.lastfm_tag)}</div></div>`:''}
+    </div>
+    <div style="padding:10px 16px;border-top:1px solid var(--border)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Auto Sync</span>
+        ${schedStatus}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);text-transform:none;cursor:pointer">
+          <input type="checkbox" ${s.enabled?'checked':''} style="width:auto" onchange="_gsSet('${g.id}','enabled',this.checked)"> Enabled
+        </label>
+        <select style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono)" onchange="_gsSet('${g.id}','mode',this.value);renderDiscovery()">
+          <option value="interval" ${isInterval?'selected':''}>Interval</option>
+          <option value="timed"    ${!isInterval?'selected':''}>Specific days</option>
+        </select>
+        ${isInterval
+          ? `<select style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono)" onchange="_gsSet('${g.id}','interval_minutes',parseInt(this.value))">${intervalOpts}</select>`
+          : `<div style="display:flex;gap:3px">${dayBtns}</div>
+             <input type="time" value="${s.times[0]||'06:00'}" style="font-size:11px;background:var(--bg);border:1px solid var(--border);color:var(--text2);padding:3px 7px;font-family:var(--mono);width:110px" onchange="_gsSetTime('${g.id}',this.value)">`}
+        <button class="btn btn-ghost btn-sm" style="font-size:11px;padding:3px 10px" onclick="saveGroupSchedule('${g.id}')">Save</button>
+      </div>
+    </div>
+    <div style="padding:6px 16px;border-top:1px solid var(--border);font-size:11px;color:var(--muted)">
+      Each sync wipes and replaces the Navidrome playlist with fresh recommendations
+    </div>
+  </div>`;
+}
+async function addDiscoveryGroup(){
+  openDiscoveryModal(null);
+}
+async function editDiscoveryGroup(id){
+  const g=_discoveryGroups.find(x=>x.id===id);
+  if(g)openDiscoveryModal(g);
+}
+async function deleteDiscoveryGroup(id){
+  if(!confirm('Delete this discovery playlist?'))return;
+  const r=await api('DELETE',`/api/discovery/groups/${id}`);
+  if(r&&r.ok){await loadDiscovery();toast('Deleted');}else toast('Delete failed','err');
+}
+async function runDiscoverySync(id){
+  const r=await api('POST',`/api/discovery/sync/${id}`);
+  if(!r)return;
+  if(r.status===409){toast('Sync already running','err');return;}
+  if(r.ok){toast('Discovery sync started');$('console').innerHTML='';setRunning(true,'sync');goSync();}
+  else toast('Failed to start','err');
+}
+// ── Discovery Modal ───────────────────────────────────────────────
+function toggleDiscFollowup(){
+  const enabled=$('disc-followup-enabled').checked;
+  $('disc-followup-fields').style.display=enabled?'block':'none';
+}
+let _editingDiscoveryId=null;
+function openDiscoveryModal(g){
+  _editingDiscoveryId=g?g.id:null;
+  const src=g?.discovery_source||'spotify_playlist';
+  $('disc-modal-title').textContent=g?'Edit Discovery Playlist':'New Discovery Playlist';
+  $('disc-name').value=g?.name||'Discovery';
+  $('disc-source').value=src;
+  $('disc-nd-playlist').value=g?.discovery_nd_playlist||'';
+  $('disc-limit').value=g?.discovery_limit||30;
+  $('disc-lfm-user').value=g?.lastfm_username||'';
+  $('disc-lfm-tag').value=g?.lastfm_tag||'';
+  $('disc-sp-playlist-id').value=g?.spotify_playlist_id||'';
+  $('disc-lidarr-mode').value=g?.lidarr_mode||'track';
+  $('disc-sp-picker').style.display='none';
+  $('disc-sp-picker').innerHTML='';
+  updateDiscSourceFields();
+  // Follow-up fields
+  const fu=g?.followup||{};
+  $('disc-followup-enabled').checked=!!fu.enabled;
+  $('disc-followup-delay').value=fu.delay_hours||24;
+  $('disc-followup-attempts').value=fu.max_attempts??2;
+  $('disc-followup-gap').value=fu.gap_hours||24;
+  $('disc-followup-action').value=fu.action||'resend_notify';
+  $('disc-followup-threshold').value=fu.threshold||1;
+  toggleDiscFollowup();
+  $('disc-modal').classList.add('open');
+}
+function closeDiscoveryModal(){$('disc-modal').classList.remove('open');}
+function updateDiscSourceFields(){
+  const src=$('disc-source').value;
+  $('disc-sp-pick-row').style.display=src==='spotify_playlist'?'block':'none';
+  $('disc-lfm-user-row').style.display=(src==='lastfm_loved'||src==='lastfm_similar'||src==='lastfm_recommended')?'block':'none';
+  $('disc-lfm-tag-row').style.display=src==='lastfm_tag'?'block':'none';
+}
+async function browseDiscSpPlaylists(){
+  const picker=$('disc-sp-picker');
+  picker.style.display='block';
+  picker.innerHTML='<div style="padding:8px;color:var(--muted);font-size:12px">Loading…</div>';
+  const r=await api('GET','/api/spotify/playlists');
+  if(!r||!r.ok){
+    picker.innerHTML='<div style="padding:8px;color:var(--red);font-size:12px">Could not load — check Spotify connection in Services tab</div>';
+    return;
+  }
+  const pls=await r.json();
+  if(!pls.length){picker.innerHTML='<div style="padding:8px;color:var(--muted);font-size:12px">No playlists found</div>';return;}
+  picker.innerHTML=pls.map(p=>`<div class="pick-item" onclick="selectDiscSpPlaylist('${p.id}','${esc(p.name)}')">
+    <span style="color:var(--p)">${esc(p.name)}</span>
+    <span style="color:var(--muted);font-size:11px;font-family:var(--mono)">${p.tracks||''} tracks</span>
+  </div>`).join('');
+}
+function _extractSpotifyId(raw){
+  // Accept full share URL or bare ID
+  // e.g. https://open.spotify.com/playlist/37i9dQZEVXcQ9COmYvdajy?si=abc
+  raw = raw.trim();
+  const m = raw.match(/playlist\/([A-Za-z0-9]+)/);
+  if(m) return m[1];
+  return raw.split('?')[0].trim();
+}
+function pasteDiscoverWeekly(){
+  $('disc-sp-playlist-id').value='37i9dQZEVXcQ9COmYvdajy';
+  if(!$('disc-name').value||$('disc-name').value==='Discovery')$('disc-name').value='Discover Weekly';
+  if(!$('disc-nd-playlist').value)$('disc-nd-playlist').value='Discover Weekly';
+}
+function pasteReleaseRadar(){
+  $('disc-sp-playlist-id').value='37i9dQZEVXbpjTvhcz2tQA';
+  if(!$('disc-name').value||$('disc-name').value==='Discovery')$('disc-name').value='Release Radar';
+  if(!$('disc-nd-playlist').value)$('disc-nd-playlist').value='Release Radar';
+}
+function selectDiscSpPlaylist(id,name){
+  $('disc-sp-playlist-id').value=id;
+  if(!$('disc-name').value||$('disc-name').value==='Discovery')$('disc-name').value=name;
+  if(!$('disc-nd-playlist').value)$('disc-nd-playlist').value=name;
+  $('disc-sp-picker').style.display='none';
+}
+async function saveDiscoveryGroup(){
+  const rawId=$('disc-sp-playlist-id').value.trim();
+  const fuEnabled=$('disc-followup-enabled').checked;
+  const body={
+    name:$('disc-name').value.trim()||'Discovery',
+    discovery_source:$('disc-source').value,
+    discovery_nd_playlist:$('disc-nd-playlist').value.trim(),
+    discovery_limit:parseInt($('disc-limit').value)||30,
+    lastfm_username:$('disc-lfm-user').value.trim(),
+    lastfm_tag:$('disc-lfm-tag').value.trim(),
+    spotify_playlist_id:rawId?_extractSpotifyId(rawId):'',
+    lidarr_mode:$('disc-lidarr-mode').value||'track',
+    followup:{
+      enabled:fuEnabled,
+      delay_hours:parseInt($('disc-followup-delay').value)||24,
+      max_attempts:parseInt($('disc-followup-attempts').value)??2,
+      gap_hours:parseInt($('disc-followup-gap').value)||24,
+      action:$('disc-followup-action').value||'resend_notify',
+      threshold:parseInt($('disc-followup-threshold').value)||1,
+    },
+  };
+  const r=_editingDiscoveryId
+    ?await api('PUT',`/api/discovery/groups/${_editingDiscoveryId}`,body)
+    :await api('POST','/api/discovery/groups',body);
+  if(r&&r.ok){closeDiscoveryModal();await loadDiscovery();toast(_editingDiscoveryId?'Updated':'Created');}
+  else toast('Save failed','err');
+}
+// ── Last.fm Config ─────────────────────────────────────────────────
+async function loadLastfmConfig(){
+  const r=await api('GET','/api/lastfm/config');if(!r||!r.ok)return;
+  const c=await r.json();
+  $('lfm-username').value=c.username||'';
+  $('lfm-api-key').value=c.api_key||'';
+  $('lfm-api-secret').value=c.api_secret?'••••••••':'';
+  // Update connection status dot
+  const dot=$('lfm-dot'),sub=$('lfm-sub');
+  if(dot&&sub){
+    if(c.api_key&&c.username){
+      dot.className='conn-dot connected';
+      sub.textContent='Configured — '+c.username;
+    } else if(c.api_key){
+      dot.className='conn-dot';dot.style.background='var(--yellow)';
+      sub.textContent='API key set — add username to enable discovery';
+    } else {
+      dot.className='conn-dot';
+      sub.textContent='Not configured';
+    }
+  }
+}
+async function testLastfmConnection(){
+  const key=$('lfm-api-key').value.trim();
+  const user=$('lfm-username').value.trim();
+  const sub=$('lfm-sub');const dot=$('lfm-dot');
+  if(!key){toast('Enter an API key first','err');return;}
+  if(!user){toast('Enter a Last.fm username first','err');return;}
+  sub.textContent='Testing…';
+  const r=await api('POST','/api/lastfm/test',{api_key:key,username:user});
+  if(!r||!r.ok){sub.textContent='Test request failed';return;}
+  const d=await r.json();
+  if(d.ok){
+    dot.className='conn-dot connected';
+    sub.textContent='Connected — '+d.display_name;
+    toast('Last.fm connected');
+  } else {
+    dot.className='conn-dot';dot.style.background='var(--red)';
+    sub.textContent='Error: '+d.error;
+    toast('Last.fm test failed','err');
+  }
+}
+async function saveLastfmConfig(){
+  const secret=$('lfm-api-secret').value;
+  const body={
+    username:$('lfm-username').value.trim(),
+    api_key:$('lfm-api-key').value.trim(),
+    api_secret:secret==='••••••••'?'••••••••':secret,
+  };
+  const r=await api('POST','/api/lastfm/config',body);
+  if(r&&r.ok){toast('Last.fm config saved');loadLastfmConfig();}else toast('Save failed','err');
+}
+
+// Boot
+(async()=>{const r=await fetch('/api/me');if(r.ok)showApp();})();
+</script>
+<!-- ════════════════════ DISCOVERY MODAL ════════════════════ -->
+<div class="modal-overlay" id="disc-modal">
+  <div class="modal" style="width:640px;max-width:95vw">
+    <div class="modal-hd">
+      <span id="disc-modal-title">New Discovery Playlist</span>
+      <button class="close-x" onclick="closeDiscoveryModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid-2" style="margin-bottom:14px">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" id="disc-name" placeholder="e.g. Weekly Discoveries">
+        </div>
+        <div class="field">
+          <label>Navidrome Playlist Name</label>
+          <input type="text" id="disc-nd-playlist" placeholder="Same as name if blank">
+          <div class="hint">Wiped and rebuilt on every sync</div>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:14px">
+        <label>Source</label>
+        <select id="disc-source" onchange="updateDiscSourceFields()">
+          <optgroup label="Spotify">
+            <option value="spotify_playlist">Pick a specific Spotify playlist</option>
+          </optgroup>
+          <optgroup label="Last.fm">
+            <option value="lastfm_loved">Loved tracks — tracks you have hearted</option>
+            <option value="lastfm_similar">Similar artist discovery — based on your taste</option>
+            <option value="lastfm_tag">Top tracks for a tag / genre</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div id="disc-sp-pick-row" style="display:none;margin-bottom:14px">
+        <div class="info-box" style="margin-bottom:12px">
+          <strong>Discover Weekly &amp; Release Radar work here.</strong> The playlist URL stays the same permanently — Spotify just swaps in fresh tracks every Monday / Friday. Paste it once and every sync reads that week's recommendations automatically.
+          <div style="margin-top:8px;font-size:11px;color:var(--text2)">
+            To get the URL: open Spotify → go to Discover Weekly or Release Radar → click the three-dot menu → Share → Copy link to playlist. Paste the full URL or just the ID below.
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:8px">
+          <label>Spotify Playlist URL or ID</label>
+          <input type="text" id="disc-sp-playlist-id" placeholder="https://open.spotify.com/playlist/... or just the ID">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="browseDiscSpPlaylists()">Browse your playlists</button>
+          <span style="font-size:11px;color:var(--muted)">or paste quick links:</span>
+          <button class="btn btn-ghost btn-sm" onclick="pasteDiscoverWeekly()" style="font-size:11px">Use Discover Weekly</button>
+          <button class="btn btn-ghost btn-sm" onclick="pasteReleaseRadar()" style="font-size:11px">Use Release Radar</button>
+        </div>
+        <div id="disc-sp-picker" class="pick-list" style="display:none;margin-top:8px;max-height:200px;overflow-y:auto"></div>
+      </div>
+      <div id="disc-lfm-user-row" class="field" style="margin-bottom:14px;display:none">
+        <label>Last.fm Username <span style="color:var(--muted);font-weight:400">(leave blank to use Connections setting)</span></label>
+        <input type="text" id="disc-lfm-user" placeholder="e.g. your_lastfm_username">
+      </div>
+      <div id="disc-lfm-tag-row" class="field" style="margin-bottom:14px;display:none">
+        <label>Tag / Genre</label>
+        <input type="text" id="disc-lfm-tag" placeholder="e.g. trance, house, drum and bass">
+        <div class="hint">Uses Last.fm top tracks for this genre. Set API key in Connections → Last.fm.</div>
+      </div>
+      <div class="grid-2" style="margin-bottom:14px">
+        <div class="field">
+          <label>Tracks per run</label>
+          <input type="number" id="disc-limit" value="30" min="5" max="100">
+        </div>
+        <div class="field">
+          <label>Lidarr mode for missing tracks</label>
+          <select id="disc-lidarr-mode">
+            <option value="track">Track only</option>
+            <option value="album">Whole album</option>
+            <option value="monitor_only">Monitor only</option>
+          </select>
+        </div>
+      </div>
+      <hr class="divider">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.04em">Follow-up Check</div>
+      <div style="margin-bottom:10px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;color:var(--text2);text-transform:none">
+          <input type="checkbox" id="disc-followup-enabled" style="width:auto" onchange="toggleDiscFollowup()">
+          Check if Lidarr downloads completed and notify if not
+        </label>
+      </div>
+      <div id="disc-followup-fields" style="display:none">
+        <div class="grid-2" style="margin-bottom:10px">
+          <div class="field">
+            <label>First check after sync</label>
+            <select id="disc-followup-delay">
+              <option value="12">12 hours</option>
+              <option value="24" selected>24 hours</option>
+              <option value="48">48 hours</option>
+              <option value="72">72 hours</option>
+              <option value="168">1 week</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Max attempts</label>
+            <select id="disc-followup-attempts">
+              <option value="1">1 — check once then stop</option>
+              <option value="2" selected>2 — check twice</option>
+              <option value="3">3 — check three times</option>
+              <option value="0">Unlimited — retry every sync</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Gap between attempts</label>
+            <select id="disc-followup-gap">
+              <option value="24" selected>24 hours</option>
+              <option value="48">48 hours</option>
+              <option value="72">72 hours</option>
+              <option value="168">1 week</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>If still missing</label>
+            <select id="disc-followup-action">
+              <option value="notify">Notify only</option>
+              <option value="resend_notify" selected>Re-send to Lidarr + notify</option>
+              <option value="resend_silent">Re-send silently, notify if next check also fails</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Notify threshold</label>
+            <select id="disc-followup-threshold">
+              <option value="1" selected>Any missing track</option>
+              <option value="3">3 or more missing</option>
+              <option value="5">5 or more missing</option>
+              <option value="10">10 or more missing</option>
+            </select>
+          </div>
+        </div>
+        <div class="info-box" style="font-size:11px">Checks run via the scheduler — make sure the container is running. Notifications use the Gotify/webhook settings in Settings.</div>
+      </div>
+      <div class="warn-box" style="margin-top:12px">Each sync completely clears the Navidrome playlist and rebuilds it from fresh recommendations.</div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeDiscoveryModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveDiscoveryGroup()">Save</button>
+    </div>
+  </div>
+</div>
+<!-- ════════════ ADD CONNECTION MODAL ════════════ -->
+<div class="modal-overlay" id="add-conn-modal">
+  <div class="modal" style="width:500px;max-width:95vw">
+    <div class="modal-hd">
+      <span>Add Connection</span>
+      <button class="close-x" onclick="$('add-conn-modal').classList.remove('open')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <button class="conn-pick-btn" onclick="openConnConfig('navidrome')">
+          <div class="conn-pick-icon">ND</div>
+          <div class="conn-pick-label">Navidrome</div>
+          <div class="conn-pick-sub">Music server</div>
+        </button>
+        <button class="conn-pick-btn" onclick="openConnConfig('spotify')">
+          <div class="conn-pick-icon" style="color:var(--spotify)">SP</div>
+          <div class="conn-pick-label">Spotify</div>
+          <div class="conn-pick-sub">Streaming + playlists</div>
+        </button>
+        <button class="conn-pick-btn" onclick="openConnConfig('youtube')">
+          <div class="conn-pick-icon" style="color:var(--youtube)">YT</div>
+          <div class="conn-pick-label">YouTube Music</div>
+          <div class="conn-pick-sub">Streaming + playlists</div>
+        </button>
+        <button class="conn-pick-btn" onclick="openConnConfig('lastfm')">
+          <div class="conn-pick-icon" style="color:#d51007">LFM</div>
+          <div class="conn-pick-label">Last.fm</div>
+          <div class="conn-pick-sub">Discovery source</div>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ NAVIDROME CONFIG MODAL ════════════ -->
+<div class="modal-overlay" id="conn-navidrome-modal">
+  <div class="modal" style="width:540px;max-width:95vw">
+    <div class="modal-hd"><span>Configure Navidrome</span><button class="close-x" onclick="closeConnModal('navidrome')">×</button></div>
+    <div class="modal-body">
+      <div class="conn-card" style="margin-bottom:16px">
+        <div class="conn-info"><div class="conn-dot" id="nd-dot"></div>
+          <div><div class="conn-name">Navidrome</div><div class="conn-sub" id="nd-sub">Not configured</div></div></div>
+        <button class="btn btn-ghost btn-sm" onclick="testNavidrome()">Test</button>
+      </div>
+      <div class="grid-2">
+        <div class="field" style="grid-column:1/-1"><label>URL</label><input type="text" id="cfg-nd-url" placeholder="http://192.168.1.100:4533"></div>
+        <div class="field"><label>Username</label><input type="text" id="cfg-nd-user"></div>
+        <div class="field"><label>Password</label><input type="password" id="cfg-nd-pass" placeholder="Leave blank to keep current"></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeConnModal('navidrome')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConnNavidrome()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ SPOTIFY CONFIG MODAL ════════════ -->
+<div class="modal-overlay" id="conn-spotify-modal">
+  <div class="modal" style="width:560px;max-width:95vw">
+    <div class="modal-hd"><span>Configure Spotify</span><button class="close-x" onclick="closeConnModal('spotify')">×</button></div>
+    <div class="modal-body">
+      <div class="conn-card" style="margin-bottom:16px">
+        <div class="conn-info"><div class="conn-dot" id="sp-dot"></div>
+          <div><div class="conn-name">Spotify</div><div class="conn-sub" id="sp-sub">Not connected</div></div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-spotify btn-sm" id="sp-connect-btn" onclick="connectSpotify()">Connect</button>
+          <button class="btn btn-danger btn-sm" id="sp-disconnect-btn" style="display:none" onclick="disconnectSpotify()">Disconnect</button>
+        </div>
+      </div>
+      <div id="sp-reauth-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.4);border-radius:6px;font-size:12px;color:#ff9090">
+        <span id="sp-reauth-msg"></span>
+        <button class="btn btn-spotify btn-sm" style="margin-left:12px;padding:3px 10px" onclick="connectSpotify()">Re-connect</button>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Client ID</label><input type="text" id="cfg-sp-id"></div>
+        <div class="field"><label>Client Secret</label><input type="password" id="cfg-sp-secret" placeholder="Leave blank to keep current"></div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Redirect URI</label>
+          <input type="text" id="cfg-sp-redirect">
+          <div class="hint">Set this exactly in your Spotify Developer Dashboard</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeConnModal('spotify')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConnSpotify()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ YOUTUBE CONFIG MODAL ════════════ -->
+<div class="modal-overlay" id="conn-youtube-modal">
+  <div class="modal" style="width:600px;max-width:95vw">
+    <div class="modal-hd"><span>Configure YouTube Music</span><button class="close-x" onclick="closeConnModal('youtube')">×</button></div>
+    <div class="modal-body">
+      <div class="conn-card" style="margin-bottom:16px">
+        <div class="conn-info"><div class="conn-dot" id="yt-dot"></div>
+          <div><div class="conn-name">YouTube Music</div><div class="conn-sub" id="yt-sub">Not connected</div></div></div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-youtube btn-sm" id="yt-connect-btn" onclick="connectYoutube()">Connect</button>
+          <button class="btn btn-danger btn-sm" id="yt-disconnect-btn" style="display:none" onclick="disconnectYoutube()">Disconnect</button>
+        </div>
+      </div>
+      <div id="yt-reauth-banner" style="display:none;margin-bottom:12px;padding:10px 14px;background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.4);border-radius:6px;font-size:12px;color:#ff9090">
+        <span id="yt-reauth-msg"></span>
+        <button class="btn btn-youtube btn-sm" style="margin-left:12px;padding:3px 10px" onclick="promptYtHeadersRefresh()">Re-paste Headers</button>
+      </div>
+      <div style="display:flex;gap:20px;margin-bottom:14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:12px;color:var(--text2)">
+          <input type="radio" name="yt-method" value="headers" id="yt-method-headers" onchange="toggleYtMethod()">
+          Browser Headers <span style="color:var(--green);font-size:10px">Recommended</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;font-size:12px;color:var(--text2)">
+          <input type="radio" name="yt-method" value="oauth" id="yt-method-oauth" onchange="toggleYtMethod()">
+          OAuth (requires public domain)
+        </label>
+      </div>
+      <div id="yt-headers-fields">
+        <div class="info-box" style="margin-bottom:12px">
+          <strong style="color:var(--p)">How to get your headers</strong>
+          <ol style="padding-left:16px;line-height:2.1;margin-top:8px">
+            <li>Open <strong>music.youtube.com</strong> — make sure you're logged in</li>
+            <li>Press F12 → Network tab → click any request to music.youtube.com</li>
+            <li>Right-click Request Headers → Copy → Copy request headers</li>
+            <li>Paste below and click Save &amp; Connect</li>
+          </ol>
+          <div style="margin-top:6px;color:var(--yellow);font-size:11px">Headers expire after a few weeks — re-paste when YouTube stops working</div>
+        </div>
+        <div class="field">
+          <label>Paste Request Headers</label>
+          <textarea id="cfg-yt-headers" rows="6" placeholder=":authority: music.youtube.com&#10;:method: GET&#10;accept: */*&#10;cookie: ..."></textarea>
+        </div>
+        <div id="yt-headers-error" style="display:none;margin-top:8px;padding:10px 12px;background:#2a0a0a;border:1px solid #7f1d1d;border-radius:6px;color:#f87171;font-size:12px;font-family:var(--mono)"></div>
+        <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="saveYtHeaders()">Save Headers &amp; Connect</button>
+          <button class="btn btn-ghost btn-sm" onclick="promptYtHeadersRefresh()">Headers expired? Refresh</button>
+        </div>
+      </div>
+      <div id="yt-oauth-fields" style="display:none">
+        <div class="warn-box" style="margin-bottom:12px">OAuth requires a public HTTPS domain. Google does not allow IP addresses as redirect URIs.</div>
+        <div class="grid-2">
+          <div class="field"><label>Client ID</label><input type="text" id="cfg-yt-id"></div>
+          <div class="field"><label>Client Secret</label><input type="password" id="cfg-yt-secret"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeConnModal('youtube')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ LAST.FM CONFIG MODAL ════════════ -->
+<div class="modal-overlay" id="conn-lastfm-modal">
+  <div class="modal" style="width:500px;max-width:95vw">
+    <div class="modal-hd"><span>Configure Last.fm</span><button class="close-x" onclick="closeConnModal('lastfm')">×</button></div>
+    <div class="modal-body">
+      <div class="conn-card" style="margin-bottom:16px">
+        <div class="conn-info"><div class="conn-dot" id="lfm-dot"></div>
+          <div><div class="conn-name">Last.fm</div><div class="conn-sub" id="lfm-sub">Not configured</div></div></div>
+        <button class="btn btn-ghost btn-sm" onclick="testLastfmConnection()">Test</button>
+      </div>
+      <div class="info-box" style="margin-bottom:12px">Get a free API key at <a href="https://www.last.fm/api/account/create" target="_blank" style="color:var(--s)">last.fm/api/account/create</a>.</div>
+      <div class="grid-2">
+        <div class="field"><label>Username</label><input type="text" id="lfm-username" placeholder="your_lastfm_username"></div>
+        <div class="field"><label>API Key</label><input type="text" id="lfm-api-key" placeholder="32-character key"></div>
+        <div class="field"><label>API Secret <span style="color:var(--muted);font-weight:400">(optional)</span></label><input type="password" id="lfm-api-secret" placeholder="leave blank to keep current"></div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="closeConnModal('lastfm')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveLastfmConfig();closeConnModal('lastfm')">Save</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

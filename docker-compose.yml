@@ -1,0 +1,27 @@
+services:
+  soundstitch:
+    image: ghcr.io/ashenkeep/soundstitch:latest
+    container_name: soundstitch
+    ports:
+      - "8443:8443"
+    environment:
+      CONFIG_PATH:   "/data/config.json"
+      PLAYLIST_DIR:  "/data/playlists"
+      LOG_DIR:       "/data/logs"
+      TZ:            "Australia/Perth"   # change to your timezone
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+# ── Quick start ───────────────────────────────────────────────────
+# 1. Copy this file to a folder on your server
+# 2. Run: docker compose up -d
+# 3. Open: https://YOUR_HOST_IP:8443
+#    (accept the self-signed cert warning)
+# 4. Default login: admin / changeme
+#
+# To update to the latest version:
+#   docker compose pull && docker compose restart
+#
+# Spotify redirect URI: https://YOUR_HOST_IP:8443/api/spotify/callback
+# YouTube redirect URI: https://YOUR_HOST_IP:8443/api/youtube/callback

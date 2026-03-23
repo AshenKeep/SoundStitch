@@ -1,0 +1,31 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1a1030"/>
+      <stop offset="100%" stop-color="#09090e"/>
+    </radialGradient>
+    <linearGradient id="wg" x1="20" y1="100" x2="180" y2="100" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#a0c4ff" stop-opacity="0.5"/>
+      <stop offset="40%"  stop-color="#a0c4ff"/>
+      <stop offset="60%"  stop-color="#c8b6ff"/>
+      <stop offset="100%" stop-color="#c8b6ff" stop-opacity="0.5"/>
+    </linearGradient>
+    <filter id="gp"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="gs"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <circle cx="100" cy="100" r="98" fill="url(#bg)" stroke="#c8b6ff" stroke-width="1.5" stroke-opacity=".25"/>
+  <!-- Groove rings -->
+  <circle cx="100" cy="100" r="86" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+  <circle cx="100" cy="100" r="77" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+  <circle cx="100" cy="100" r="68" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+  <circle cx="100" cy="100" r="58" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+  <circle cx="100" cy="100" r="48" fill="none" stroke="#c8b6ff" stroke-width=".6" stroke-opacity=".1"/>
+  <!-- Label area -->
+  <circle cx="100" cy="100" r="36" fill="#14102a" stroke="#c8b6ff" stroke-width="1.2" stroke-opacity=".35"/>
+  <!-- Waveform across label -->
+  <path d="M22 100 C28 100 31 72 38 72 C45 72 48 128 56 128 C64 128 67 80 74 80 C81 80 83 100 100 100 C117 100 119 120 126 120 C133 120 136 56 144 56 C152 56 155 110 162 110 C169 110 172 88 178 88"
+        stroke="url(#wg)" stroke-width="3.5" stroke-linecap="round" fill="none" filter="url(#gs)"/>
+  <!-- Centre spindle -->
+  <circle cx="100" cy="100" r="7" fill="#c8b6ff" filter="url(#gp)"/>
+  <circle cx="100" cy="100" r="3.5" fill="#09090e"/>
+</svg>

@@ -1,0 +1,40 @@
+# User data — never commit credentials or personal data
+data/config.json
+data/.secret
+data/logs/
+data/backups/
+data/master/
+data/playlists/
+
+# Keep the data directory itself but not contents
+!data/.gitkeep
+
+# Self-signed certs — users generate their own
+certs/cert.pem
+certs/key.pem
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
