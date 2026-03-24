@@ -203,13 +203,17 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
 /* ── MASTER / TRACKS ── */
 .track-list{max-height:460px;overflow-y:auto}
 .track-row{display:flex;align-items:center;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);
-  font-size:12px;transition:background .1s}
+  font-size:12px;transition:background .1s;border-left:2px solid transparent}
 .track-row:hover{background:#ffffff04}
+.track-row.flagged{background:rgba(240,192,96,.07);border-left-color:var(--yellow)}
+.track-row.overridden{background:rgba(80,200,120,.06);border-left-color:var(--green)}
 .track-num{color:var(--muted);min-width:26px;text-align:right;font-size:11px;font-family:var(--mono);flex-shrink:0}
 .track-info{flex:1;min-width:0}
 .track-title{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .track-meta{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .track-sources{display:flex;gap:3px;flex-shrink:0}
+.track-actions{display:flex;gap:3px;flex-shrink:0;opacity:0;transition:opacity .12s}
+.track-row:hover .track-actions{opacity:1}
 .src-dot{width:5px;height:5px;border-radius:50%}
 .src-nd{background:#b8b4ff}.src-sp{background:var(--spotify)}.src-yt{background:#f87171}
 
@@ -346,7 +350,7 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
       </svg>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span class="wordmark">SoundStitch</span>
-        <span class="ver">v0.6.14</span>
+        <span class="ver">v0.6.15</span>
       </div>
     </a>
 
@@ -448,7 +452,7 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
     <!-- ── MASTER ── -->
     <div class="tab" id="tab-master">
       <div class="page-title">Master Playlists</div>
-      <div style="color:var(--muted);font-size:12px;margin-bottom:16px">Merged snapshots saved after each sync as CSV and M3U. Download, inspect, or view history.</div>
+      <div style="color:var(--muted);font-size:12px;margin-bottom:16px">Merged snapshots saved after each sync. Hover a track to <strong style="color:var(--text)">Delete</strong> it from all linked playlists, <strong style="color:var(--yellow)">Flag</strong> bad metadata, or <strong style="color:var(--text)">Edit</strong> and lock corrected metadata.</div>
       <div style="display:grid;grid-template-columns:260px 1fr;gap:14px;align-items:start">
         <div class="section">
           <div class="section-hd"><span class="accent">●</span> Groups</div>
@@ -1608,6 +1612,7 @@ async function selectMasterGroup(groupId,groupName,el){
   await loadMasterTracks(groupId);
 }
 async function loadMasterTracks(groupId){
+  _currentGroupId=groupId;
   const r=await api('GET',`/api/master/${groupId}/tracks`);if(!r||!r.ok)return;
   const data=await r.json();
   $('master-meta-text').textContent=`${data.track_count} tracks · saved ${data.saved_at||'—'}`;
@@ -1624,20 +1629,92 @@ async function loadHistoryVersion(groupId,filename){
 }
 function renderMasterTracks(tracks){
   const el=$('master-tracks');
-  if(!tracks.length){el.innerHTML='<div class="empty">No tracks</div>';return;}
+  if(!tracks||!tracks.length){el.innerHTML='<div class="empty">No tracks</div>';return;}
   el.innerHTML=tracks.map((t,i)=>{
     const sources=(t.source||'').split(',');
-    const dots=`${sources.includes('navidrome')?'<div class="src-dot src-nd" title="Navidrome"></div>':''}${sources.includes('spotify')?'<div class="src-dot src-sp" title="Spotify"></div>':''}${sources.includes('youtube')?'<div class="src-dot src-yt" title="YouTube"></div>':''}`;
-    const album=t.album?`<span style="color:var(--muted);font-size:10px"> · ${esc(t.album)}</span>`:'';
-    return `<div class="track-row">
+    const dots=[
+      sources.includes('navidrome')?'<div class="src-dot src-nd" title="Navidrome"></div>':'',
+      sources.includes('spotify') ?'<div class="src-dot src-sp" title="Spotify"></div>':'',
+      sources.includes('youtube') ?'<div class="src-dot src-yt" title="YouTube"></div>':'',
+    ].join('');
+    const album   = t.album?`<span style="color:var(--muted);font-size:10px"> · ${esc(t.album)}</span>`:'';
+    const isFlagged   = t.flagged==='1'||t.flagged===true;
+    const isOverride  = t.metadata_override==='1'||t.metadata_override===true;
+    const rowClass    = isFlagged?'flagged':isOverride?'overridden':'';
+    const badge       = isFlagged
+      ? '<span style="font-size:9px;color:var(--yellow);margin-left:4px" title="Flagged — bad metadata">⚑</span>'
+      : isOverride
+        ? '<span style="font-size:9px;color:var(--green);margin-left:4px" title="Metadata corrected">✓</span>'
+        : '';
+    const artist = esc(t.artist||'?');
+    const title  = esc(t.title||'?');
+    return `<div class="track-row ${rowClass}" data-i="${i}">
       <div class="track-num">${i+1}</div>
       <div class="track-info">
-        <div class="track-title">${esc(t.title||'?')}${album}</div>
-        <div class="track-meta">${esc(t.artist||'?')}</div>
+        <div class="track-title">${title}${badge}${album}</div>
+        <div class="track-meta">${artist}</div>
       </div>
       <div class="track-sources">${dots}</div>
+      <div class="track-actions">
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px"
+          onclick="openTrackEdit(${i})" title="Edit / fix metadata">Edit</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--yellow)"
+          onclick="flagTrack(${i},${!isFlagged})" title="${isFlagged?'Unflag':'Flag bad metadata'}">
+          ${isFlagged?'Unflag':'Flag'}</button>
+        <button class="btn btn-danger btn-sm" style="font-size:10px;padding:2px 7px"
+          onclick="deleteTrack(${i})" title="Remove from master + all playlists">Delete</button>
+      </div>
     </div>`;
   }).join('');
+}
+async function deleteTrack(i){
+  const t=_currentTracks[i];
+  if(!t||!_currentGroupId)return;
+  if(!confirm(`Remove "${t.artist} — ${t.title}" from master and all linked playlists?\n\nThis also blacklists it so it won't be re-added on the next sync.`))return;
+  const r=await api('DELETE',`/api/master/${_currentGroupId}/track`,{artist:t.artist,title:t.title});
+  if(!r||!r.ok){toast('Delete failed','err');return;}
+  const d=await r.json();
+  if(d.errors&&d.errors.length)toast('Removed with some errors — check console','err');
+  else toast('Track removed and blacklisted');
+  loadMasterTracks(_currentGroupId);
+}
+async function flagTrack(i, setFlagged){
+  const t=_currentTracks[i];
+  if(!t||!_currentGroupId)return;
+  const r=await api('POST',`/api/master/${_currentGroupId}/track/flag`,
+    {artist:t.artist,title:t.title,flagged:setFlagged});
+  if(r&&r.ok){
+    _currentTracks[i].flagged=setFlagged?'1':'';
+    renderMasterTracks(_currentTracks);
+    toast(setFlagged?'Flagged as bad metadata':'Flag cleared');
+  } else toast('Failed','err');
+}
+let _editTrackIdx=null;
+function openTrackEdit(i){
+  const t=_currentTracks[i];if(!t)return;
+  _editTrackIdx=i;
+  $('tedit-artist').value=t.artist||'';
+  $('tedit-title').value=t.title||'';
+  $('tedit-album').value=t.album||'';
+  $('tedit-orig-artist').value=t.artist||'';
+  $('tedit-orig-title').value=t.title||'';
+  $('track-edit-modal').classList.add('open');
+}
+async function saveTrackEdit(){
+  if(_editTrackIdx===null||!_currentGroupId)return;
+  const body={
+    artist_orig:$('tedit-orig-artist').value,
+    title_orig: $('tedit-orig-title').value,
+    artist:     $('tedit-artist').value.trim(),
+    title:      $('tedit-title').value.trim(),
+    album:      $('tedit-album').value.trim(),
+  };
+  const r=await api('PUT',`/api/master/${_currentGroupId}/track/metadata`,body);
+  if(r&&r.ok){
+    toast('Metadata saved and locked');
+    $('track-edit-modal').classList.remove('open');
+    loadMasterTracks(_currentGroupId);
+  } else toast('Save failed','err');
 }
 
 // ── Schedule ──────────────────────────────────────────────────────
@@ -2554,6 +2631,38 @@ async function saveLastfmConfig(){
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="closeConnModal('lastfm')">Cancel</button>
       <button class="btn btn-primary" onclick="saveLastfmConfig();closeConnModal('lastfm')">Save</button>
+    </div>
+  </div>
+</div>
+<!-- ════════════ TRACK METADATA EDIT MODAL ════════════ -->
+<div class="modal-overlay" id="track-edit-modal">
+  <div class="modal" style="width:480px;max-width:95vw">
+    <div class="modal-hd">
+      <span>Edit Track Metadata</span>
+      <button class="close-x" onclick="$('track-edit-modal').classList.remove('open')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="info-box" style="margin-bottom:14px">
+        Corrections are saved to the master snapshot and <strong>locked</strong> — future syncs will not overwrite them. The track will be re-sent to Lidarr with the corrected album on the next sync.
+      </div>
+      <input type="hidden" id="tedit-orig-artist">
+      <input type="hidden" id="tedit-orig-title">
+      <div class="field" style="margin-bottom:10px">
+        <label>Artist</label>
+        <input type="text" id="tedit-artist" placeholder="Artist name">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Title</label>
+        <input type="text" id="tedit-title" placeholder="Track title">
+      </div>
+      <div class="field" style="margin-bottom:10px">
+        <label>Album <span style="color:var(--muted);font-weight:400">(this is what Lidarr searches for)</span></label>
+        <input type="text" id="tedit-album" placeholder="Correct album name">
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="$('track-edit-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTrackEdit()">Save &amp; Lock Metadata</button>
     </div>
   </div>
 </div>

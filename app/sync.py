@@ -159,17 +159,88 @@ _last_mb_resolve = 0.0
 def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
     """
     Search MusicBrainz recordings for artist+title.
-    Returns the album (release) name of the first Studio Album match,
-    or the first release of any type if no album found.
+    Returns the best album name, preferring proper studio releases over
+    compilations, promos, samplers, and live bootlegs.
+
+    Release quality ranking (higher = better):
+      5 — Official studio album (no secondary types, no promo/sampler indicators)
+      4 — Deluxe / special / expanded edition of a studio album
+      3 — Single or EP
+      2 — Live album
+      1 — Compilation, soundtrack, or other
+      0 — Promo/sampler/various-artists (filtered by name patterns)
+
     rec_key is defined BEFORE the try block so it is in scope for both
     the cache-set calls inside the try AND the negative-result set after it.
     """
-    # Must be defined outside try so except/post-try code can reference it
+    # Compilation/promo/sampler name indicators — reject these even if tagged "Album"
+    _JUNK_PATTERNS = [
+        r"^promo only[:\s]",
+        r"^visions?[:\s]",
+        r"^rock sound[:\s]",
+        r"^alternative times[,\s]",
+        r"^maximum metal[,\s]",
+        r"^headshot\s",
+        r"^by genre",
+        r"^various artists",
+        r"^\d{4}-\d{2}-\d{2}:",      # live bootleg date strings
+        r"^\d{4}‐\d{2}‐\d{2}:",      # unicode dashes
+        r"\bva\b\s*-",
+        r"^triple j[:\s]",
+        r"^dirt\s",                   # DiRT game soundtracks
+        r"systemfehler",
+        r"original.*picture.*soundtrack",
+        r"motion picture",
+    ]
+    import re as _re
+
+    def _junk_score(name: str) -> bool:
+        """Return True if this release name looks like a promo/sampler/various."""
+        nl = name.lower()
+        for pat in _JUNK_PATTERNS:
+            if _re.search(pat, nl):
+                return True
+        return False
+
+    def _release_rank(rel: dict) -> int:
+        """Score a MB release dict — higher is better."""
+        rg   = rel.get("release-group", {})
+        ptype = rg.get("primary-type", "")
+        stypes = [s.lower() for s in rg.get("secondary-types", [])]
+        name  = rel.get("title", "")
+
+        if _junk_score(name):
+            return 0
+
+        if ptype != "Album":
+            if ptype in ("Single", "EP"):
+                return 3
+            if ptype == "Broadcast":
+                return 1
+            return 1  # Other/unknown
+
+        # It's tagged Album — check secondary types
+        if "compilation" in stypes:
+            return 1
+        if "live" in stypes:
+            return 2
+        if "soundtrack" in stypes:
+            return 1
+        if "mixtape/street" in stypes or "demo" in stypes:
+            return 1
+
+        # Clean studio album — check for deluxe/special editions
+        nl = name.lower()
+        if any(x in nl for x in ("deluxe", "special edition", "expanded", "anniversary")):
+            return 4
+
+        return 5  # Proper studio album
+
     rec_key = f"recording:{artist.lower()}|{title.lower()}"
     cached  = importer._mb_cache_get(rec_key)
     if cached is not None:
         emit_debug(f"  [MB-REC] Cache hit — album: '{cached}'")
-        return cached or None  # empty string = previously confirmed not found
+        return cached or None
 
     global _last_mb_resolve
     cooldown = conf["cooldowns"]["mb_cooldown"]
@@ -183,7 +254,7 @@ def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
         resp    = importer.requests.get(
             f"{importer.MB_BASE_URL}/recording",
             params={"query": query, "limit": "10", "fmt": "json",
-                    "inc": "releases"},
+                    "inc": "releases+release-groups"},
             headers=headers, timeout=15
         )
         _last_mb_resolve = time.time()
@@ -194,8 +265,10 @@ def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
         recordings = resp.json().get("recordings", [])
         emit_debug(f"  [MB-REC] {len(recordings)} recording(s) found")
 
+        best_name  = None
+        best_rank  = -1
+
         for rec in recordings:
-            # Verify artist roughly matches
             rec_artists = " ".join(
                 a.get("name", "") for a in rec.get("artist-credit", [])
                 if isinstance(a, dict)
@@ -203,27 +276,31 @@ def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
             if fuzz.token_set_ratio(artist.lower(), rec_artists.lower()) < 60:
                 continue
 
-            releases = rec.get("releases", [])
-            # Prefer Studio Album
-            for rel in releases:
-                rtype = rel.get("release-group", {}).get("primary-type", "")
-                if rtype == "Album":
-                    name = rel.get("title", "")
-                    if name:
-                        emit_debug(f"  [MB-REC] Studio Album found: '{name}'")
-                        importer._mb_cache_set(rec_key, name)
-                        return name
-            # Fallback: first release of any type
-            if releases:
-                name = releases[0].get("title", "")
-                if name:
-                    emit_debug(f"  [MB-REC] Release (any type) found: '{name}'")
-                    importer._mb_cache_set(rec_key, name)
-                    return name
+            for rel in rec.get("releases", []):
+                rank = _release_rank(rel)
+                name = rel.get("title", "")
+                if not name:
+                    continue
+                emit_debug(f"  [MB-REC] Release '{name}' rank={rank}")
+                if rank > best_rank:
+                    best_rank = rank
+                    best_name = name
+                if best_rank == 5:
+                    break  # Can't do better than a clean studio album
+
+            if best_rank == 5:
+                break
+
+        if best_name:
+            tag = {5:"Studio Album", 4:"Deluxe Edition", 3:"Single/EP",
+                   2:"Live", 1:"Compilation/Other", 0:"Promo/Sampler"}.get(best_rank, "?")
+            emit_debug(f"  [MB-REC] Best release ({tag}): '{best_name}'")
+            importer._mb_cache_set(rec_key, best_name)
+            return best_name
 
     except Exception as e:
         emit_debug(f"  [MB-REC] Exception: {e}")
-    # Cache negative result — don't re-query MB for same track
+
     importer._mb_cache_set(rec_key, "")
     return None
 
@@ -316,9 +393,11 @@ def enrich_missing_albums(tracks: list[dict], conf: dict) -> list[dict]:
     """
     For tracks that have a real artist but no album,
     attempt to resolve the album via MB/Spotify/YTMusic.
+    Tracks with metadata_override=True are skipped — their metadata is authoritative.
     Modifies tracks in place and returns them.
     """
-    no_album = [t for t in tracks if not t.get("album", "").strip()]
+    no_album = [t for t in tracks
+                if not t.get("album", "").strip() and not t.get("metadata_override")]
     if not no_album:
         return tracks
 
@@ -357,10 +436,30 @@ def _tracks_match(a: dict, b: dict, threshold: int = 85) -> bool:
     return score >= threshold
 
 
-def union_merge(track_lists: list[list[dict]]) -> list[dict]:
+def union_merge(track_lists: list[list[dict]],
+                blacklist: list[dict] | None = None) -> list[dict]:
+    """
+    Merge multiple track lists into a deduplicated master.
+    Tracks matching any entry in blacklist (by artist+title fuzzy match) are excluded.
+    """
+    def _is_blacklisted(track: dict) -> bool:
+        if not blacklist:
+            return False
+        artist = track.get("artist", "").lower().strip()
+        title  = track.get("title",  "").lower().strip()
+        for b in blacklist:
+            ba = b.get("artist", "").lower().strip()
+            bt = b.get("title",  "").lower().strip()
+            if (fuzz.token_set_ratio(artist, ba) >= 90 and
+                    fuzz.token_set_ratio(title, bt) >= 90):
+                return True
+        return False
+
     merged: list[dict] = []
     for tracks in track_lists:
         for track in tracks:
+            if _is_blacklisted(track):
+                continue
             found = False
             for existing in merged:
                 if _tracks_match(track, existing):
@@ -398,20 +497,22 @@ def save_master_snapshot(group: dict, tracks: list[dict]):
         # ── Build CSV ──────────────────────────────────────────────
         csv_fields = ["#", "artist", "title", "album", "source",
                       "navidrome_id", "spotify_id", "youtube_id",
-                      "mb_artist_id", "mb_album_id"]
+                      "mb_artist_id", "mb_album_id", "flagged", "metadata_override"]
         csv_rows = []
         for i, t in enumerate(tracks, 1):
             csv_rows.append({
-                "#":            i,
-                "artist":       t.get("artist",       ""),
-                "title":        t.get("title",         ""),
-                "album":        t.get("album",         ""),
-                "source":       t.get("source",        ""),
-                "navidrome_id": t.get("navidrome_id",  ""),
-                "spotify_id":   t.get("spotify_id",    ""),
-                "youtube_id":   t.get("youtube_id",    ""),
-                "mb_artist_id": t.get("mb_artist_id",  ""),
-                "mb_album_id":  t.get("mb_album_id",   ""),
+                "#":                i,
+                "artist":           t.get("artist",            ""),
+                "title":            t.get("title",              ""),
+                "album":            t.get("album",              ""),
+                "source":           t.get("source",             ""),
+                "navidrome_id":     t.get("navidrome_id",       ""),
+                "spotify_id":       t.get("spotify_id",         ""),
+                "youtube_id":       t.get("youtube_id",         ""),
+                "mb_artist_id":     t.get("mb_artist_id",       ""),
+                "mb_album_id":      t.get("mb_album_id",        ""),
+                "flagged":          "1" if t.get("flagged") else "",
+                "metadata_override":"1" if t.get("metadata_override") else "",
             })
 
         def _write_csv(path: Path):
@@ -474,8 +575,10 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
     """
     Read the latest saved CSV and restore previously resolved fields onto
     matching tracks by (artist_lower, title_lower) key. Fields restored:
-      album, spotify_id, youtube_id, mb_artist_id, mb_album_id
+      album, spotify_id, youtube_id, mb_artist_id, mb_album_id, flagged, metadata_override
     Only fills in blanks — never overwrites a value the current fetch already provided.
+    Tracks with metadata_override=True have their artist/title/album locked — the cached
+    values are authoritative and will NOT be overwritten by future source fetches.
     """
     csv_path = Path(MASTER_DIR) / f"{group_id}.csv"
     if not csv_path.exists():
@@ -483,12 +586,10 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
     try:
         import csv as _csv
         content    = csv_path.read_text(encoding="utf-8")
-        # Keep lines that are either the CSV header (#,artist,...) or data rows.
-        # Strip only comment lines that start with "# " (metadata comments).
         data_lines = []
         for line in content.splitlines():
             if line.startswith("# ") or (line.startswith("#") and not line.startswith("#,")):
-                continue   # skip metadata comments
+                continue
             if line.strip():
                 data_lines.append(line)
 
@@ -498,11 +599,16 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
             t = row.get("title",  "").strip().lower()
             if a and t:
                 stored[(a, t)] = {
-                    "album":        row.get("album",        "").strip(),
-                    "spotify_id":   row.get("spotify_id",   "").strip(),
-                    "youtube_id":   row.get("youtube_id",   "").strip(),
-                    "mb_artist_id": row.get("mb_artist_id", "").strip(),
-                    "mb_album_id":  row.get("mb_album_id",  "").strip(),
+                    "album":             row.get("album",             "").strip(),
+                    "spotify_id":        row.get("spotify_id",        "").strip(),
+                    "youtube_id":        row.get("youtube_id",        "").strip(),
+                    "mb_artist_id":      row.get("mb_artist_id",      "").strip(),
+                    "mb_album_id":       row.get("mb_album_id",       "").strip(),
+                    "flagged":           row.get("flagged",           "").strip() == "1",
+                    "metadata_override": row.get("metadata_override", "").strip() == "1",
+                    # Store the override values directly so we can restore them
+                    "artist_override":   row.get("artist", "").strip(),
+                    "title_override":    row.get("title",  "").strip(),
                 }
         if not stored:
             emit_debug(f"[CACHE] No usable rows in snapshot for group {group_id}")
@@ -519,6 +625,18 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
                 if prev.get(field) and not track.get(field):
                     track[field] = prev[field]
                     changed = True
+            # Restore flags — always (they don't come from source)
+            if prev.get("flagged"):
+                track["flagged"] = True
+                changed = True
+            if prev.get("metadata_override"):
+                track["metadata_override"] = True
+                # Lock artist/title/album to override values
+                track["artist"] = prev["artist_override"]
+                track["title"]  = prev["title_override"]
+                if prev.get("album"):
+                    track["album"] = prev["album"]
+                changed = True
             if changed:
                 loaded += 1
         emit_debug(f"[CACHE] Restored cached metadata for {loaded}/{len(tracks)} track(s)")
@@ -787,7 +905,7 @@ def sync_group(group: dict, conf: dict):
     # PHASE 2 — UNION MERGE into master
     # ════════════════════════════════════════════════
     emit_info(f"Merging {len(all_track_lists)} source(s): {', '.join(source_summary)}")
-    master = union_merge(all_track_lists)
+    master = union_merge(all_track_lists, blacklist=group.get("blacklist", []))
     emit_ok(f"Master playlist: {len(master)} unique track(s) after deduplication")
 
     # ════════════════════════════════════════════════
