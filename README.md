@@ -2,7 +2,7 @@
 
 A self-hosted playlist sync engine. Union-merges your Navidrome, Spotify, and YouTube Music playlists, pushes missing tracks to Lidarr for download, and keeps everything in sync automatically.
 
-![Version](https://img.shields.io/badge/version-0.6.13-blue)
+![Version](https://img.shields.io/badge/version-0.6.14-blue)
 ![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fashenkeep%2Fsoundstitch-blue)
 
 ## Features
