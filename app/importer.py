@@ -765,14 +765,28 @@ def _filter_matching_releases(releases: list[dict],
                                threshold: int = 55) -> list[dict]:
     """
     Return only releases whose title plausibly matches the expected artist + album.
-    Uses fuzzy matching against the release title field.
-    threshold=55 is intentionally lenient to handle remix names, deluxe editions etc.
+
+    Scoring logic:
+    - score_full:   token_set_ratio against "artist album" combined string
+    - score_album:  partial_ratio of album name against release title
+                    (handles "Artist - Album [FLAC]" style titles)
+    - score_artist: token_set_ratio of full artist name against release title
+                    (NOT partial_ratio — prevents "Faith" matching "Faith Marie")
+
+    A release passes if:
+      - score_full >= threshold, OR
+      - score_album >= threshold (album name clearly present in title), OR
+      - BOTH score_artist >= threshold AND score_album >= (threshold - 15)
+        (artist AND album both present, even if individually weaker)
+
+    Taking max() of all three is intentionally avoided — it lets a strong
+    artist-only match pass releases with completely wrong album names.
     """
     if not expected_artist and not expected_album:
         return releases
 
-    needle = f"{expected_artist} {expected_album}".strip().lower()
-    needle_album = expected_album.lower()
+    needle        = f"{expected_artist} {expected_album}".strip().lower()
+    needle_album  = expected_album.lower()
     needle_artist = expected_artist.lower()
 
     matched = []
@@ -782,21 +796,28 @@ def _filter_matching_releases(releases: list[dict],
             matched.append(r)  # no title to judge — keep it
             continue
 
-        # Score against full "artist album" string
+        # Full combined "artist album" score
         score_full   = fuzz.token_set_ratio(needle, title)
-        # Score just the album name portion (handles "Artist - Album" style titles)
+        # Album name present in release title
         score_album  = fuzz.partial_ratio(needle_album, title)
-        # Score just the artist name
-        score_artist = fuzz.partial_ratio(needle_artist, title)
+        # Full artist name match (token_set not partial — avoids "Faith" matching "Faith Marie")
+        score_artist = fuzz.token_set_ratio(needle_artist, title)
 
-        best = max(score_full, score_album, score_artist)
-        emit_debug(f"    release '{r.get('title','?')}' — match score={best} "
-                   f"(full={score_full} album={score_album} artist={score_artist})")
+        # Pass conditions — see docstring
+        passes = (
+            score_full   >= threshold or
+            score_album  >= threshold or
+            (score_artist >= threshold and score_album >= threshold - 15)
+        )
 
-        if best >= threshold:
+        emit_debug(f"    release '{r.get('title','?')}' — "
+                   f"full={score_full} album={score_album} artist={score_artist} "
+                   f"{'PASS' if passes else f'DISCARD (threshold={threshold})'}")
+
+        if passes:
             matched.append(r)
         else:
-            emit_debug(f"    Discarding mismatched release: '{r.get('title','?')}' (score={best} < {threshold})")
+            emit_debug(f"    Discarding mismatched release: '{r.get('title','?')}'")
 
     return matched
 
