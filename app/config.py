@@ -26,7 +26,7 @@ DEFAULTS = {
     "lidarr": {"url": "", "api_key": "", "music_path": "/music", "quality_id": 1, "meta_id": 1},
     "musicbrainz": {
         "client_id": "", "client_secret": "", "refresh_token": "",
-        "app_name": "SoundStitch", "version": "0.6.15", "contact": ""
+        "app_name": "SoundStitch", "version": "0.6.16", "contact": ""
     },
     "lastfm": {
         "api_key": "", "api_secret": "", "session_key": "", "username": ""

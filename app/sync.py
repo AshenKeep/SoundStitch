@@ -55,21 +55,77 @@ def emit_debug(m): emit("DEBUG",   m)
 
 
 # ═════════════════════════════════════════════════════════════════
-#  YOUTUBE TITLE PARSER
-#  YouTube tracks often arrive with channel name as "artist" and
-#  "Real Artist - Track Title (Official Video)" as the title.
-#  We extract the real artist/title from the raw YT title string.
+#  VERSION TYPE DETECTION
+#  Detects whether a track is a live recording, acoustic version,
+#  remix, demo, instrumental, remaster, edit, or cover.
+#  Returns a dict with:
+#    version_type:  "studio"|"live"|"acoustic"|"remix"|"demo"|
+#                   "instrumental"|"remaster"|"edit"|"cover"
+#    version_label: human-readable label extracted from title
+#                   e.g. "Live at Brixton", "John 00 Fleming Remix"
+#    remix_artist:  name of remix artist (if version_type=="remix")
+#    clean_title:   title with noise stripped but version label preserved
+#    base_title:    title with ALL version tags stripped (for MB search)
 # ═════════════════════════════════════════════════════════════════
 
-# Suffixes to strip from cleaned titles
-_NOISE_SUFFIX = re.compile(
+# Patterns that identify version type — checked in priority order
+# Each entry: (version_type, regex that captures the version label group)
+_VERSION_PATTERNS = [
+    # Remix — most important for EDM. Capture the remixer name.
+    ("remix",        re.compile(
+        r'[\(\[]\s*((?:[^()\[\]]+?)\s+remix(?:\s+edit)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    ("remix",        re.compile(
+        r'[\(\[]\s*((?:[^()\[\]]+?)\s+(?:club|extended|radio|dub|vocal|instrumental)\s+mix)\s*[\)\]]',
+        re.IGNORECASE)),
+    ("remix",        re.compile(
+        r'[\(\[]\s*((?:extended|club|radio|original|vocal|dub|instrumental)\s+(?:mix|version))\s*[\)\]]',
+        re.IGNORECASE)),
+    # Live
+    ("live",         re.compile(
+        r'[\(\[]\s*(live(?:\s+(?:at|from|in|@)\s+[^()\[\]]+?)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    ("live",         re.compile(
+        r'[\(\[]\s*(live(?:\s+version)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Acoustic
+    ("acoustic",     re.compile(
+        r'[\(\[]\s*(acoustic(?:\s+(?:version|session|mix))?|unplugged(?:\s+version)?|mtv\s+unplugged)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Demo
+    ("demo",         re.compile(
+        r'[\(\[]\s*(demo(?:\s+(?:version|recording|tape))?)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Instrumental
+    ("instrumental", re.compile(
+        r'[\(\[]\s*(instrumental(?:\s+version)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Remaster — preserve year if present
+    ("remaster",     re.compile(
+        r'[\(\[]\s*(\d{4}\s*(?:digital\s*)?remaster(?:ed)?(?:\s+version)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    ("remaster",     re.compile(
+        r'[\(\[]\s*(remaster(?:ed)?(?:\s+\d{4})?(?:\s+version)?)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Cover / tribute
+    ("cover",        re.compile(
+        r'[\(\[]\s*(cover(?:\s+version)?|tribute)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Single/radio edit
+    ("edit",         re.compile(
+        r'[\(\[]\s*((?:single|radio)\s+edit)\s*[\)\]]',
+        re.IGNORECASE)),
+]
+
+# Pure noise — no version meaning, safe to strip
+_NOISE_ONLY = re.compile(
     r'\s*[\(\[]\s*('
     r'official\s*(music\s*)?video|official\s*audio|official\s*lyric\s*video|'
-    r'lyrics?|lyric\s*video|audio\s*only|hq|hd|4k|full\s*version|'
-    r'extended\s*(mix|version)?|radio\s*edit|original\s*(mix|version)|'
-    r'visuali[sz]er|remaster(?:ed)?|music\s*video|official\s*clip|'
-    r'slowed.*|reverb.*|\d{4}\s*remake|\d{4}\s*remaster'
-    r')[\s\w,\.]*[\)\]]',
+    r'lyrics?\s*video?|audio\s*only|hq|hd|4k|'
+    r'full\s*version|visuali[sz]er|music\s*video|official\s*clip|'
+    r'slowed.*?|reverb.*?|\d{4}\s*remake|'
+    r'feat\.?.*?'  # feat. tags — keep in base title search
+    r')\s*[\)\]]',
     re.IGNORECASE
 )
 _NOISE_TRAILING = re.compile(
@@ -80,11 +136,76 @@ _NOISE_TRAILING = re.compile(
 _LEADING_TAG = re.compile(r'^\s*\[(hd|hq|4k|official)\]\s*', re.IGNORECASE)
 
 
+def detect_track_version(title: str) -> dict:
+    """
+    Analyse a track title and return version metadata.
+
+    Returns dict with keys:
+      version_type:  "studio"|"live"|"acoustic"|"remix"|"demo"|
+                     "instrumental"|"remaster"|"edit"|"cover"
+      version_label: extracted label string, e.g. "John 00 Fleming Remix"
+      remix_artist:  remix artist name if version_type=="remix", else ""
+      clean_title:   title with pure noise stripped, version label kept
+      base_title:    title with ALL version/noise tags stripped (for MB search)
+    """
+    raw = title.strip()
+
+    version_type  = "studio"
+    version_label = ""
+    remix_artist  = ""
+
+    for vtype, pattern in _VERSION_PATTERNS:
+        m = pattern.search(raw)
+        if m:
+            version_type  = vtype
+            version_label = m.group(1).strip()
+            if vtype == "remix":
+                # Extract remixer — everything before "remix"/"mix"
+                label_lower = version_label.lower()
+                for suffix in (" remix edit", " remix", " club mix", " extended mix",
+                                " radio mix", " dub mix", " vocal mix",
+                                " instrumental mix", " original mix"):
+                    if label_lower.endswith(suffix):
+                        remix_artist = version_label[:len(version_label)-len(suffix)].strip()
+                        break
+                if not remix_artist:
+                    remix_artist = version_label
+            break
+
+    # clean_title — strip only pure noise, preserve version labels
+    clean = _LEADING_TAG.sub('', raw).strip()
+    clean = _NOISE_ONLY.sub('', clean).strip()
+    clean = _NOISE_TRAILING.sub('', clean).strip(' -—').strip()
+
+    # base_title — strip everything including version tags (for MB search of base track)
+    base = clean
+    for _, pattern in _VERSION_PATTERNS:
+        base = pattern.sub('', base).strip()
+    base = _NOISE_ONLY.sub('', base).strip(' -—()\[\]').strip()
+
+    return {
+        "version_type":  version_type,
+        "version_label": version_label,
+        "remix_artist":  remix_artist,
+        "clean_title":   clean,
+        "base_title":    base or clean,
+    }
+
+
 def _clean_title(s: str) -> str:
+    """Legacy clean for YT parser — strips noise only, preserves version labels."""
     s = _LEADING_TAG.sub('', s)
-    s = _NOISE_SUFFIX.sub('', s)
+    s = _NOISE_ONLY.sub('', s)
     s = _NOISE_TRAILING.sub('', s)
     return s.strip(' -—').strip()
+
+
+# ═════════════════════════════════════════════════════════════════
+#  YOUTUBE TITLE PARSER
+#  YouTube tracks often arrive with channel name as "artist" and
+#  "Real Artist - Track Title (Official Video)" as the title.
+#  We extract the real artist/title from the raw YT title string.
+# ═════════════════════════════════════════════════════════════════
 
 
 def parse_yt_track(artist: str, title: str) -> tuple[str, str]:
@@ -127,7 +248,8 @@ def parse_yt_track(artist: str, title: str) -> tuple[str, str]:
 
 
 def enrich_yt_tracks(tracks: list[dict]) -> list[dict]:
-    """Parse YouTube tracks to extract real artist/title from video title strings."""
+    """Parse YouTube tracks to extract real artist/title from video title strings,
+    and detect version type (live, acoustic, remix etc.)."""
     enriched = []
     changed  = 0
     for t in tracks:
@@ -140,8 +262,19 @@ def enrich_yt_tracks(tracks: list[dict]) -> list[dict]:
             emit_debug(f"  [YT-PARSE] '{orig_artist} — {orig_title}'"
                        f" → '{new_artist} — {new_title}'")
 
-        enriched.append({**t, "artist": new_artist, "title": new_title,
-                         "yt_raw_artist": orig_artist, "yt_raw_title": orig_title})
+        # Detect version type from the cleaned title
+        ver = detect_track_version(new_title)
+        enriched.append({
+            **t,
+            "artist":        new_artist,
+            "title":         new_title,
+            "yt_raw_artist": orig_artist,
+            "yt_raw_title":  orig_title,
+            "version_type":  t.get("version_type") or ver["version_type"],
+            "version_label": t.get("version_label") or ver["version_label"],
+            "remix_artist":  t.get("remix_artist")  or ver["remix_artist"],
+            "base_title":    t.get("base_title")     or ver["base_title"],
+        })
     if changed:
         emit_info(f"[YT] Cleaned {changed}/{len(tracks)} track titles from video title strings")
     return enriched
@@ -156,7 +289,179 @@ def enrich_yt_tracks(tracks: list[dict]) -> list[dict]:
 _last_mb_resolve = 0.0
 
 
-def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
+def _resolve_album_mb(artist: str, title: str, conf: dict,
+                       version_type: str = "studio",
+                       remix_artist: str = "") -> str | None:
+    """
+    Search MusicBrainz recordings for artist+title.
+    Release ranking is biased by version_type:
+
+      studio/remaster/edit/cover → prefer studio album > deluxe > single/EP
+      live    → prefer live album > studio album > other
+      acoustic→ prefer acoustic/unplugged single/EP > studio album
+      demo    → prefer demo/EP > studio album
+      remix   → prefer remix single (search uses remix_artist + title) > EP > album
+      instrumental → prefer instrumental version recordings
+    """
+    import re as _re
+
+    # Compilation/promo/sampler name indicators — always reject
+    _JUNK_PATTERNS = [
+        r"^promo only[:\s]", r"^visions?[:\s]", r"^rock sound[:\s]",
+        r"^alternative times[,\s]", r"^maximum metal[,\s]", r"^headshot\s",
+        r"^by genre", r"^various artists", r"^\d{4}-\d{2}-\d{2}:",
+        r"^\d{4}‐\d{2}‐\d{2}:", r"\bva\b\s*-", r"^triple j[:\s]",
+        r"^dirt\s", r"systemfehler", r"original.*picture.*soundtrack",
+        r"motion picture",
+    ]
+
+    def _junk_score(name: str) -> bool:
+        nl = name.lower()
+        return any(_re.search(pat, nl) for pat in _JUNK_PATTERNS)
+
+    def _release_rank(rel: dict) -> int:
+        """Score a MB release — ranking depends on version_type."""
+        rg     = rel.get("release-group", {})
+        ptype  = rg.get("primary-type", "")
+        stypes = [s.lower() for s in rg.get("secondary-types", [])]
+        name   = rel.get("title", "")
+        nl     = name.lower()
+
+        if _junk_score(name):
+            return 0
+
+        is_live         = "live"         in stypes
+        is_compilation  = "compilation"  in stypes
+        is_soundtrack   = "soundtrack"   in stypes
+        is_demo         = "demo"         in stypes
+        is_remix_ep     = ("remix" in nl or "remixes" in nl)
+        is_acoustic_rel = ("acoustic" in nl or "unplugged" in nl)
+        is_single_ep    = ptype in ("Single", "EP")
+        is_album        = ptype == "Album"
+
+        if version_type == "live":
+            if is_live:                         return 7
+            if is_album and not is_compilation: return 3  # studio fallback
+            if is_single_ep:                    return 2
+            return 1
+
+        elif version_type == "acoustic":
+            if is_acoustic_rel:                 return 7
+            if is_single_ep and is_acoustic_rel:return 8
+            if is_single_ep:                    return 4  # acoustic singles
+            if is_album and not is_compilation: return 3
+            return 1
+
+        elif version_type == "demo":
+            if is_demo:                         return 7
+            if is_single_ep:                    return 5
+            if is_album and not is_compilation: return 3
+            return 1
+
+        elif version_type == "remix":
+            if is_remix_ep and is_single_ep:    return 8
+            if is_remix_ep:                     return 7
+            if is_single_ep:                    return 5
+            if is_album and not is_compilation: return 3
+            return 1
+
+        elif version_type == "instrumental":
+            if "instrumental" in nl:            return 7
+            if is_single_ep:                    return 5
+            if is_album and not is_compilation: return 3
+            return 1
+
+        else:
+            # studio / remaster / edit / cover / default — original ranking
+            if _junk_score(name):               return 0
+            if not is_album:
+                if is_single_ep:                return 3
+                return 1
+            if is_compilation:                  return 1
+            if is_live:                         return 2
+            if is_soundtrack or is_demo:        return 1
+            if any(x in nl for x in ("deluxe", "special edition", "expanded", "anniversary")):
+                return 4
+            return 5
+
+    # For remixes, build a search query using remix_artist + title
+    if version_type == "remix" and remix_artist:
+        search_title  = title  # keep full title with remix label for MB
+        search_artist = artist
+    else:
+        search_title  = title
+        search_artist = artist
+
+    rec_key = f"recording:{version_type}:{search_artist.lower()}|{search_title.lower()}"
+    cached  = importer._mb_cache_get(rec_key)
+    if cached is not None:
+        emit_debug(f"  [MB-REC] Cache hit ({version_type}) — album: '{cached}'")
+        return cached or None
+
+    global _last_mb_resolve
+    cooldown = conf["cooldowns"]["mb_cooldown"]
+    elapsed  = time.time() - _last_mb_resolve
+    if elapsed < cooldown:
+        importer._interruptible_sleep(cooldown - elapsed)
+
+    try:
+        headers = importer.mb_auth.get_headers(conf)
+        query   = f'recording:"{search_title}" AND artist:"{search_artist}"'
+        resp    = importer.requests.get(
+            f"{importer.MB_BASE_URL}/recording",
+            params={"query": query, "limit": "10", "fmt": "json",
+                    "inc": "releases+release-groups"},
+            headers=headers, timeout=15
+        )
+        _last_mb_resolve = time.time()
+        emit_debug(f"  [MB-REC] recording search ({version_type}) → HTTP {resp.status_code}")
+        if not resp.ok:
+            return None
+
+        recordings = resp.json().get("recordings", [])
+        emit_debug(f"  [MB-REC] {len(recordings)} recording(s) found")
+
+        best_name = None
+        best_rank = -1
+        # For live/acoustic/remix — we can do better than 5 (studio max)
+        perfect   = 8 if version_type in ("live","acoustic","demo","remix","instrumental") else 5
+
+        for rec in recordings:
+            rec_artists = " ".join(
+                a.get("name", "") for a in rec.get("artist-credit", [])
+                if isinstance(a, dict)
+            )
+            if fuzz.token_set_ratio(search_artist.lower(), rec_artists.lower()) < 60:
+                continue
+
+            for rel in rec.get("releases", []):
+                rank = _release_rank(rel)
+                name = rel.get("title", "")
+                if not name:
+                    continue
+                emit_debug(f"  [MB-REC] Release '{name}' rank={rank} (want: {version_type})")
+                if rank > best_rank:
+                    best_rank = rank
+                    best_name = name
+                if best_rank >= perfect:
+                    break
+
+            if best_rank >= perfect:
+                break
+
+        if best_name:
+            tag = {8:"Perfect match", 7:"Good match", 5:"Studio Album",
+                   4:"Deluxe Edition", 3:"Single/EP", 2:"Live",
+                   1:"Other", 0:"Junk"}.get(best_rank, "?")
+            emit_debug(f"  [MB-REC] Best ({tag}, wanted {version_type}): '{best_name}'")
+            importer._mb_cache_set(rec_key, best_name)
+            return best_name
+
+    except Exception as e:
+        emit_debug(f"  [MB-REC] Exception: {e}")
+
+    importer._mb_cache_set(rec_key, "")
+    return None
     """
     Search MusicBrainz recordings for artist+title.
     Returns the best album name, preferring proper studio releases over
@@ -305,13 +610,22 @@ def _resolve_album_mb(artist: str, title: str, conf: dict) -> str | None:
     return None
 
 
-def _resolve_album_spotify(artist: str, title: str) -> str | None:
-    """Search Spotify for track, return album name."""
+def _resolve_album_spotify(artist: str, title: str,
+                            version_type: str = "studio",
+                            remix_artist: str = "") -> str | None:
+    """Search Spotify for track, return album name biased by version_type."""
     if not spotify.is_connected():
         return None
     try:
-        # Try strict query first, then looser
-        for q in [f"track:{title} artist:{artist}", f"{artist} {title}"]:
+        # Build queries — remix uses remix_artist for better matching
+        if version_type == "remix" and remix_artist:
+            queries = [f"track:{title} artist:{remix_artist}",
+                       f"track:{title} artist:{artist}",
+                       f"{artist} {title}"]
+        else:
+            queries = [f"track:{title} artist:{artist}", f"{artist} {title}"]
+
+        for q in queries:
             resp = importer.requests.get(
                 "https://api.spotify.com/v1/search",
                 headers=spotify._headers(),
@@ -322,20 +636,31 @@ def _resolve_album_spotify(artist: str, title: str) -> str | None:
                 continue
             items = resp.json().get("tracks", {}).get("items", [])
             for item in items:
-                # Verify artist roughly matches
                 item_artists = ", ".join(a["name"] for a in item.get("artists", []))
-                if fuzz.token_set_ratio(artist.lower(), item_artists.lower()) < 55:
+                check_artist = remix_artist if (version_type=="remix" and remix_artist) else artist
+                if fuzz.token_set_ratio(check_artist.lower(), item_artists.lower()) < 55:
                     continue
-                album = item.get("album", {}).get("name", "")
-                # Skip "single" albums — they're named after the track and not useful
+                album      = item.get("album", {}).get("name", "")
                 album_type = item.get("album", {}).get("album_type", "")
+                album_nl   = album.lower()
+
+                # For live/acoustic/remix — prefer albums that match the version type
+                if version_type == "live" and "live" in album_nl:
+                    emit_debug(f"  [SP-ALB] Spotify live album: '{album}'")
+                    return album
+                if version_type == "acoustic" and ("acoustic" in album_nl or "unplugged" in album_nl):
+                    emit_debug(f"  [SP-ALB] Spotify acoustic album: '{album}'")
+                    return album
+                if version_type == "remix" and ("remix" in album_nl or "remixes" in album_nl):
+                    emit_debug(f"  [SP-ALB] Spotify remix album: '{album}'")
+                    return album
+
                 if album and album_type != "single":
                     emit_debug(f"  [SP-ALB] Spotify album ({album_type}): '{album}'")
                     return album
                 elif album:
-                    # Return single name as last resort (better than nothing)
-                    emit_debug(f"  [SP-ALB] Spotify single: '{album}' (will use if nothing better)")
-                    return album  # still useful — Lidarr can match on it
+                    emit_debug(f"  [SP-ALB] Spotify single: '{album}'")
+                    return album
     except Exception as e:
         emit_debug(f"  [SP-ALB] Exception: {e}")
     return None
@@ -363,19 +688,26 @@ def _resolve_album_ytmusic(artist: str, title: str) -> str | None:
     return None
 
 
-def resolve_album_for_track(artist: str, title: str, conf: dict) -> str | None:
+def resolve_album_for_track(artist: str, title: str, conf: dict,
+                             version_type: str = "studio",
+                             remix_artist: str = "") -> str | None:
     """
     Try to resolve a missing album name for a track.
     Chain: MusicBrainz recording search → Spotify → YouTube Music
+    version_type biases each resolver to prefer the right kind of release.
     """
-    emit_info(f"  [ALB-RESOLVE] Looking up album for: {artist} — {title}")
+    emit_info(f"  [ALB-RESOLVE] Looking up album for: {artist} — {title}"
+              + (f" [{version_type}]" if version_type != "studio" else "")
+              + (f" (remix by {remix_artist})" if remix_artist else ""))
 
-    album = _resolve_album_mb(artist, title, conf)
+    album = _resolve_album_mb(artist, title, conf,
+                               version_type=version_type, remix_artist=remix_artist)
     if album:
         emit_ok(f"  [ALB-RESOLVE] Found via MusicBrainz: '{album}'")
         return album
 
-    album = _resolve_album_spotify(artist, title)
+    album = _resolve_album_spotify(artist, title,
+                                    version_type=version_type, remix_artist=remix_artist)
     if album:
         emit_ok(f"  [ALB-RESOLVE] Found via Spotify: '{album}'")
         return album
@@ -389,11 +721,35 @@ def resolve_album_for_track(artist: str, title: str, conf: dict) -> str | None:
     return None
 
 
+def tag_track_versions(tracks: list[dict]) -> list[dict]:
+    """
+    Detect and tag version_type/version_label/remix_artist/base_title
+    on any track list that hasn't been through enrich_yt_tracks.
+    Only fills in blanks — never overwrites existing tags.
+    """
+    for t in tracks:
+        if t.get("version_type"):
+            continue  # already tagged
+        title = t.get("title", "")
+        if not title:
+            continue
+        ver = detect_track_version(title)
+        t["version_type"]  = ver["version_type"]
+        t["version_label"] = ver["version_label"]
+        t["remix_artist"]  = ver["remix_artist"]
+        t["base_title"]    = ver["base_title"]
+        if ver["version_type"] != "studio":
+            emit_debug(f"  [VER] '{title}' → {ver['version_type']}"
+                       + (f" ({ver['version_label']})" if ver["version_label"] else ""))
+    return tracks
+
+
 def enrich_missing_albums(tracks: list[dict], conf: dict) -> list[dict]:
     """
     For tracks that have a real artist but no album,
     attempt to resolve the album via MB/Spotify/YTMusic.
     Tracks with metadata_override=True are skipped — their metadata is authoritative.
+    version_type on each track biases the resolver to find the right kind of release.
     Modifies tracks in place and returns them.
     """
     no_album = [t for t in tracks
@@ -407,11 +763,17 @@ def enrich_missing_albums(tracks: list[dict], conf: dict) -> list[dict]:
         if _stop_requested:
             emit_warn("[ALB-RESOLVE] Stop requested — aborting album resolution")
             break
-        artist = t.get("artist", "").strip()
-        title  = t.get("title",  "").strip()
+        artist       = t.get("artist",       "").strip()
+        title        = t.get("title",        "").strip()
+        version_type = t.get("version_type", "studio") or "studio"
+        remix_artist = t.get("remix_artist", "") or ""
+        # Use base_title for studio tracks so version suffixes don't confuse MB search
+        search_title = t.get("base_title", title) if version_type == "studio" else title
         if not artist or not title:
             continue
-        album = resolve_album_for_track(artist, title, conf)
+        album = resolve_album_for_track(artist, search_title, conf,
+                                        version_type=version_type,
+                                        remix_artist=remix_artist)
         if album:
             t["album"] = album
             resolved += 1
@@ -425,6 +787,26 @@ def enrich_missing_albums(tracks: list[dict], conf: dict) -> list[dict]:
 # ═════════════════════════════════════════════════════════════════
 
 def _tracks_match(a: dict, b: dict, threshold: int = 85) -> bool:
+    """
+    True if two track dicts refer to the same recording.
+    Version-typed tracks (live, acoustic, remix etc.) are only considered
+    the same if their version_type AND version_label both match.
+    Studio vs untagged are treated as equivalent (default assumption).
+    """
+    vt_a = a.get("version_type") or "studio"
+    vt_b = b.get("version_type") or "studio"
+
+    # If both have explicit (non-studio) version types they must match
+    if vt_a != "studio" and vt_b != "studio":
+        if vt_a != vt_b:
+            return False
+        # For remixes: also require remix_artist to match
+        if vt_a == "remix":
+            ra_a = (a.get("remix_artist") or "").lower().strip()
+            ra_b = (b.get("remix_artist") or "").lower().strip()
+            if ra_a and ra_b and fuzz.token_set_ratio(ra_a, ra_b) < 80:
+                return False
+
     score = max(
         fuzz.token_sort_ratio(
             f"{a.get('artist','')} {a.get('title','')}".lower(),
@@ -497,7 +879,9 @@ def save_master_snapshot(group: dict, tracks: list[dict]):
         # ── Build CSV ──────────────────────────────────────────────
         csv_fields = ["#", "artist", "title", "album", "source",
                       "navidrome_id", "spotify_id", "youtube_id",
-                      "mb_artist_id", "mb_album_id", "flagged", "metadata_override"]
+                      "mb_artist_id", "mb_album_id",
+                      "version_type", "version_label", "remix_artist", "base_title",
+                      "flagged", "metadata_override"]
         csv_rows = []
         for i, t in enumerate(tracks, 1):
             csv_rows.append({
@@ -511,6 +895,10 @@ def save_master_snapshot(group: dict, tracks: list[dict]):
                 "youtube_id":       t.get("youtube_id",         ""),
                 "mb_artist_id":     t.get("mb_artist_id",       ""),
                 "mb_album_id":      t.get("mb_album_id",        ""),
+                "version_type":     t.get("version_type",       ""),
+                "version_label":    t.get("version_label",      ""),
+                "remix_artist":     t.get("remix_artist",       ""),
+                "base_title":       t.get("base_title",         ""),
                 "flagged":          "1" if t.get("flagged") else "",
                 "metadata_override":"1" if t.get("metadata_override") else "",
             })
@@ -604,9 +992,12 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
                     "youtube_id":        row.get("youtube_id",        "").strip(),
                     "mb_artist_id":      row.get("mb_artist_id",      "").strip(),
                     "mb_album_id":       row.get("mb_album_id",       "").strip(),
+                    "version_type":      row.get("version_type",      "").strip(),
+                    "version_label":     row.get("version_label",     "").strip(),
+                    "remix_artist":      row.get("remix_artist",      "").strip(),
+                    "base_title":        row.get("base_title",        "").strip(),
                     "flagged":           row.get("flagged",           "").strip() == "1",
                     "metadata_override": row.get("metadata_override", "").strip() == "1",
-                    # Store the override values directly so we can restore them
                     "artist_override":   row.get("artist", "").strip(),
                     "title_override":    row.get("title",  "").strip(),
                 }
@@ -625,17 +1016,26 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
                 if prev.get(field) and not track.get(field):
                     track[field] = prev[field]
                     changed = True
+            # Restore version fields — only fill blanks, don't overwrite fresh detection
+            for field in ("version_type", "version_label", "remix_artist", "base_title"):
+                if prev.get(field) and not track.get(field):
+                    track[field] = prev[field]
+                    changed = True
             # Restore flags — always (they don't come from source)
             if prev.get("flagged"):
                 track["flagged"] = True
                 changed = True
             if prev.get("metadata_override"):
                 track["metadata_override"] = True
-                # Lock artist/title/album to override values
                 track["artist"] = prev["artist_override"]
                 track["title"]  = prev["title_override"]
                 if prev.get("album"):
                     track["album"] = prev["album"]
+                # Also restore locked version_type if present
+                if prev.get("version_type"):
+                    track["version_type"]  = prev["version_type"]
+                    track["version_label"] = prev.get("version_label", "")
+                    track["remix_artist"]  = prev.get("remix_artist",  "")
                 changed = True
             if changed:
                 loaded += 1
@@ -858,6 +1258,7 @@ def sync_group(group: dict, conf: dict):
         emit_ok(f"[ND] {len(nd_tracks)} track(s) fetched")
         for t in nd_tracks:
             t.pop("navidrome_id", None)
+        tag_track_versions(nd_tracks)
         all_track_lists.append(nd_tracks)
         source_summary.append(f"Navidrome={len(nd_tracks)}")
 
@@ -866,6 +1267,7 @@ def sync_group(group: dict, conf: dict):
         try:
             sp_tracks = spotify.get_playlist_tracks(sp_playlist_id)
             emit_ok(f"[SP] {len(sp_tracks)} track(s) fetched")
+            tag_track_versions(sp_tracks)
             all_track_lists.append(sp_tracks)
             source_summary.append(f"Spotify={len(sp_tracks)}")
         except Exception as e:
@@ -878,7 +1280,7 @@ def sync_group(group: dict, conf: dict):
         try:
             raw_yt    = youtube.get_playlist_tracks(yt_playlist_id)
             emit_ok(f"[YT] {len(raw_yt)} track(s) fetched")
-            yt_tracks = enrich_yt_tracks(raw_yt)
+            yt_tracks = enrich_yt_tracks(raw_yt)  # already tags versions internally
             all_track_lists.append(yt_tracks)
             source_summary.append(f"YouTube={len(yt_tracks)}")
         except Exception as e:
@@ -892,6 +1294,7 @@ def sync_group(group: dict, conf: dict):
             emit_info(f"[M3U] Parsing: '{m3u_file}'")
             m3u_tracks = importer.parse_m3u8(str(m3u_path))
             emit_ok(f"[M3U] {len(m3u_tracks)} track(s) parsed")
+            tag_track_versions(m3u_tracks)
             all_track_lists.append(m3u_tracks)
             source_summary.append(f"m3u={len(m3u_tracks)}")
         else:

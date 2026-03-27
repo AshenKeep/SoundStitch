@@ -2,7 +2,7 @@
 
 A self-hosted playlist sync engine. Union-merges your Navidrome, Spotify, and YouTube Music playlists, pushes missing tracks to Lidarr for download, and keeps everything in sync automatically.
 
-![Version](https://img.shields.io/badge/version-0.6.15-blue)
+![Version](https://img.shields.io/badge/version-0.6.16-blue)
 ![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fashenkeep%2Fsoundstitch-blue)
 
 ## Features
@@ -101,16 +101,40 @@ Create discovery playlists in the **Discovery** tab. Sources:
 
 Each discovery sync wipes and rebuilds the Navidrome playlist with fresh recommendations. Enable follow-up checks per discovery group to get notified if Lidarr has not downloaded requested tracks — configurable delay, number of attempts, gap between attempts, and action (notify only, re-send to Lidarr, or re-send silently then notify on failure).
 
+## Track Version Detection
+
+SoundStitch detects version type from track titles on ingest from all sources (Spotify, YouTube Music, Navidrome, M3U):
+
+| Version Type | Detected from |
+|---|---|
+| `live` | `(Live)`, `(Live at Brixton)`, `(Live from ...)` |
+| `acoustic` | `(Acoustic)`, `(Acoustic Version)`, `(MTV Unplugged)` |
+| `remix` | `(John 00 Fleming Remix)`, `(Extended Mix)`, `(Club Mix)` |
+| `demo` | `(Demo)`, `(Demo Version)` |
+| `instrumental` | `(Instrumental)` |
+| `remaster` | `(2011 Remaster)`, `(Remastered)` |
+| `edit` | `(Radio Edit)`, `(Single Edit)` |
+| `cover` | `(Cover)`, `(Tribute)` |
+| `studio` | default — no tag |
+
+Version type is used to bias MusicBrainz album lookup — live tracks search for live albums, acoustic tracks search for acoustic releases, remix tracks search for the specific remix single using the remixer's name. **This is especially important for EDM** where the remixer is key context — `Exploration of Space (John 00 Fleming Remix)` will search for a John 00 Fleming remix release, not the original album.
+
+Tracks with different version types are never merged during deduplication — `My Curse` and `My Curse (Acoustic)` are treated as two distinct tracks.
+
+You can correct a wrongly detected version type in the **Master** tab using the Edit action. The Version Type dropdown and Remix Artist field are locked as authoritative metadata.
+
 ## Lidarr Album Matching
 
-SoundStitch uses MusicBrainz to resolve album names before sending tracks to Lidarr. Releases are ranked by type to avoid grabbing the wrong thing:
+SoundStitch uses MusicBrainz to resolve album names before sending tracks to Lidarr. The release ranking depends on the track's version type:
 
-1. Studio album (proper release)
-2. Deluxe / special / anniversary edition
-3. Single or EP
-4. Live album
-5. Compilation or soundtrack
-6. Promo / sampler (filtered out by name pattern)
+- **Studio/default** → proper studio album > deluxe edition > single/EP
+- **Live** → live album preferred, studio album as fallback
+- **Acoustic** → acoustic/unplugged release preferred
+- **Remix** → remix single/EP preferred, uses remixer name in search
+- **Demo** → demo/EP preferred
+- **Instrumental** → instrumental version preferred
+
+Promos, samplers, and compilation names matching known patterns are always rejected regardless of version type.
 
 If a track ends up with the wrong album, use the **Edit** action in the Master tab to correct and lock the metadata.
 
@@ -168,9 +192,9 @@ SoundStitch generates a self-signed certificate at build time. Your browser will
 | Tag | Description |
 |-----|-------------|
 | `latest` | Current stable release — recommended for most users |
-| `0.6.15` | Specific version — pin this if you want to control updates manually |
+| `0.6.16` | Specific version — pin this if you want to control updates manually |
 | `dev` | Development build — latest changes, may be unstable |
-| `0.6.15-dev` | Specific dev build |
+| `0.6.16-dev` | Specific dev build |
 
 **Stable (default):**
 ```yaml

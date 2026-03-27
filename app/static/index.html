@@ -350,7 +350,7 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
       </svg>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span class="wordmark">SoundStitch</span>
-        <span class="ver">v0.6.15</span>
+        <span class="ver">v0.6.16</span>
       </div>
     </a>
 
@@ -1646,12 +1646,16 @@ function renderMasterTracks(tracks){
       : isOverride
         ? '<span style="font-size:9px;color:var(--green);margin-left:4px" title="Metadata corrected">✓</span>'
         : '';
+    const vtype   = t.version_type&&t.version_type!=='studio'?t.version_type:'';
+    const vbadge  = vtype
+      ? `<span style="font-size:9px;color:var(--muted);margin-left:5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em" title="${esc(t.version_label||vtype)}">${vtype}</span>`
+      : '';
     const artist = esc(t.artist||'?');
     const title  = esc(t.title||'?');
     return `<div class="track-row ${rowClass}" data-i="${i}">
       <div class="track-num">${i+1}</div>
       <div class="track-info">
-        <div class="track-title">${title}${badge}${album}</div>
+        <div class="track-title">${title}${badge}${vbadge}${album}</div>
         <div class="track-meta">${artist}</div>
       </div>
       <div class="track-sources">${dots}</div>
@@ -1689,6 +1693,10 @@ async function flagTrack(i, setFlagged){
     toast(setFlagged?'Flagged as bad metadata':'Flag cleared');
   } else toast('Failed','err');
 }
+function toggleRemixArtistField(){
+  const vt=$('tedit-version-type').value;
+  $('tedit-remix-row').style.display=vt==='remix'?'block':'none';
+}
 let _editTrackIdx=null;
 function openTrackEdit(i){
   const t=_currentTracks[i];if(!t)return;
@@ -1698,16 +1706,23 @@ function openTrackEdit(i){
   $('tedit-album').value=t.album||'';
   $('tedit-orig-artist').value=t.artist||'';
   $('tedit-orig-title').value=t.title||'';
+  $('tedit-version-type').value=t.version_type||'studio';
+  $('tedit-version-label').value=t.version_label||'';
+  $('tedit-remix-artist').value=t.remix_artist||'';
+  toggleRemixArtistField();
   $('track-edit-modal').classList.add('open');
 }
 async function saveTrackEdit(){
   if(_editTrackIdx===null||!_currentGroupId)return;
   const body={
-    artist_orig:$('tedit-orig-artist').value,
-    title_orig: $('tedit-orig-title').value,
-    artist:     $('tedit-artist').value.trim(),
-    title:      $('tedit-title').value.trim(),
-    album:      $('tedit-album').value.trim(),
+    artist_orig:   $('tedit-orig-artist').value,
+    title_orig:    $('tedit-orig-title').value,
+    artist:        $('tedit-artist').value.trim(),
+    title:         $('tedit-title').value.trim(),
+    album:         $('tedit-album').value.trim(),
+    version_type:  $('tedit-version-type').value,
+    version_label: $('tedit-version-label').value.trim(),
+    remix_artist:  $('tedit-remix-artist').value.trim(),
   };
   const r=await api('PUT',`/api/master/${_currentGroupId}/track/metadata`,body);
   if(r&&r.ok){
@@ -2643,21 +2658,49 @@ async function saveLastfmConfig(){
     </div>
     <div class="modal-body">
       <div class="info-box" style="margin-bottom:14px">
-        Corrections are saved to the master snapshot and <strong>locked</strong> — future syncs will not overwrite them. The track will be re-sent to Lidarr with the corrected album on the next sync.
+        Corrections are saved and <strong>locked</strong> — future syncs will not overwrite them. The track will be re-sent to Lidarr with corrected metadata on the next sync.
       </div>
       <input type="hidden" id="tedit-orig-artist">
       <input type="hidden" id="tedit-orig-title">
-      <div class="field" style="margin-bottom:10px">
-        <label>Artist</label>
-        <input type="text" id="tedit-artist" placeholder="Artist name">
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="field">
+          <label>Artist</label>
+          <input type="text" id="tedit-artist" placeholder="Artist name">
+        </div>
+        <div class="field">
+          <label>Title</label>
+          <input type="text" id="tedit-title" placeholder="Track title">
+        </div>
       </div>
       <div class="field" style="margin-bottom:10px">
-        <label>Title</label>
-        <input type="text" id="tedit-title" placeholder="Track title">
-      </div>
-      <div class="field" style="margin-bottom:10px">
-        <label>Album <span style="color:var(--muted);font-weight:400">(this is what Lidarr searches for)</span></label>
+        <label>Album <span style="color:var(--muted);font-weight:400">(what Lidarr searches for)</span></label>
         <input type="text" id="tedit-album" placeholder="Correct album name">
+      </div>
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="field">
+          <label>Version Type</label>
+          <select id="tedit-version-type" onchange="toggleRemixArtistField()">
+            <option value="studio">Studio (default)</option>
+            <option value="live">Live</option>
+            <option value="acoustic">Acoustic</option>
+            <option value="remix">Remix</option>
+            <option value="demo">Demo</option>
+            <option value="instrumental">Instrumental</option>
+            <option value="remaster">Remaster</option>
+            <option value="edit">Single/Radio Edit</option>
+            <option value="cover">Cover</option>
+          </select>
+          <div class="hint">Tells Lidarr which release type to look for</div>
+        </div>
+        <div class="field">
+          <label>Version Label <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+          <input type="text" id="tedit-version-label" placeholder="e.g. Live at Brixton">
+        </div>
+      </div>
+      <div class="field" id="tedit-remix-row" style="display:none;margin-bottom:10px">
+        <label>Remix Artist <span style="color:var(--muted);font-weight:400">(important for EDM)</span></label>
+        <input type="text" id="tedit-remix-artist" placeholder="e.g. John 00 Fleming">
+        <div class="hint">Used to find the correct remix release in Lidarr</div>
       </div>
     </div>
     <div class="modal-ft">

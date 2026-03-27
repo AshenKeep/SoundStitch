@@ -765,16 +765,20 @@ async def override_track_metadata(group_id: str, request: Request):
     """
     Save corrected metadata for a track and lock it as authoritative.
     Body: {"artist_orig": str, "title_orig": str,
-           "artist": str, "title": str, "album": str}
+           "artist": str, "title": str, "album": str,
+           "version_type": str, "version_label": str, "remix_artist": str}
     Sets metadata_override=True so future syncs don't overwrite corrections.
     """
     require_auth(request)
-    body        = await request.json()
-    artist_orig = body.get("artist_orig", "").strip()
-    title_orig  = body.get("title_orig",  "").strip()
-    new_artist  = body.get("artist", "").strip()
-    new_title   = body.get("title",  "").strip()
-    new_album   = body.get("album",  "").strip()
+    body         = await request.json()
+    artist_orig  = body.get("artist_orig",    "").strip()
+    title_orig   = body.get("title_orig",     "").strip()
+    new_artist   = body.get("artist",         "").strip()
+    new_title    = body.get("title",          "").strip()
+    new_album    = body.get("album",          "").strip()
+    new_vtype    = body.get("version_type",   "").strip()
+    new_vlabel   = body.get("version_label",  "").strip()
+    new_remixer  = body.get("remix_artist",   "").strip()
     if not artist_orig or not title_orig:
         raise HTTPException(status_code=400, detail="artist_orig and title_orig required")
 
@@ -792,7 +796,8 @@ async def override_track_metadata(group_id: str, request: Request):
 
     rows   = list(_csv.DictReader(data_lines))
     fields = list(_csv.DictReader(data_lines).fieldnames or [])
-    for extra in ("flagged", "metadata_override"):
+    for extra in ("version_type", "version_label", "remix_artist",
+                  "base_title", "flagged", "metadata_override"):
         if extra not in fields:
             fields.append(extra)
 
@@ -800,11 +805,14 @@ async def override_track_metadata(group_id: str, request: Request):
     for row in rows:
         if (row.get("artist","").strip().lower() == artist_orig.lower() and
                 row.get("title", "").strip().lower() == title_orig.lower()):
-            if new_artist: row["artist"] = new_artist
-            if new_title:  row["title"]  = new_title
-            if new_album:  row["album"]  = new_album
+            if new_artist:  row["artist"]        = new_artist
+            if new_title:   row["title"]         = new_title
+            if new_album:   row["album"]         = new_album
+            if new_vtype:   row["version_type"]  = new_vtype
+            if new_vlabel:  row["version_label"] = new_vlabel
+            if new_remixer: row["remix_artist"]  = new_remixer
             row["metadata_override"] = "1"
-            row["flagged"]           = ""   # clear flag once corrected
+            row["flagged"]           = ""
             updated = True
             break
 
