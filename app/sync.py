@@ -181,7 +181,7 @@ def detect_track_version(title: str) -> dict:
     base = clean
     for _, pattern in _VERSION_PATTERNS:
         base = pattern.sub('', base).strip()
-    base = _NOISE_ONLY.sub('', base).strip(' -—()\[\]').strip()
+    base = _NOISE_ONLY.sub('', base).strip(' -—()[]').strip()
 
     return {
         "version_type":  version_type,
@@ -303,6 +303,7 @@ def _resolve_album_mb(artist: str, title: str, conf: dict,
       remix   → prefer remix single (search uses remix_artist + title) > EP > album
       instrumental → prefer instrumental version recordings
     """
+    global _last_mb_resolve  # must be declared before any use of the variable
     import re as _re
 
     # Compilation/promo/sampler name indicators — always reject
@@ -398,7 +399,6 @@ def _resolve_album_mb(artist: str, title: str, conf: dict,
         emit_debug(f"  [MB-REC] Cache hit ({version_type}) — album: '{cached}'")
         return cached or None
 
-    global _last_mb_resolve
     cooldown = conf["cooldowns"]["mb_cooldown"]
     elapsed  = time.time() - _last_mb_resolve
     if elapsed < cooldown:
@@ -547,7 +547,6 @@ def _resolve_album_mb(artist: str, title: str, conf: dict,
         emit_debug(f"  [MB-REC] Cache hit — album: '{cached}'")
         return cached or None
 
-    global _last_mb_resolve
     cooldown = conf["cooldowns"]["mb_cooldown"]
     elapsed  = time.time() - _last_mb_resolve
     if elapsed < cooldown:
