@@ -68,52 +68,79 @@ def emit_debug(m): emit("DEBUG",   m)
 #    base_title:    title with ALL version tags stripped (for MB search)
 # ═════════════════════════════════════════════════════════════════
 
+# ── Studio-only mix names — MUST be checked BEFORE remix patterns ──
+# These look like remixes but are actually just different cuts of
+# the studio track: original mix, album mix, video mix, airplay mix etc.
+_STUDIO_MIX = re.compile(
+    r'[\(\[]\s*('
+    r'original\s+mix|original\s+version|'
+    r'album\s+(?:mix|version|edit)|'
+    r'video\s+mix|video\s+version|'
+    r'airplay\s+(?:mix|edit|version)|'
+    r'single\s+version|lp\s+version|'
+    r'[^()\[\]\s]+\s+airplay\s+(?:mix|edit)'   # e.g. "AT&B airplay mix"
+    r')\s*[\)\]]',
+    re.IGNORECASE
+)
+
 # Patterns that identify version type — checked in priority order
 # Each entry: (version_type, regex that captures the version label group)
 _VERSION_PATTERNS = [
-    # Remix — most important for EDM. Capture the remixer name.
-    ("remix",        re.compile(
-        r'[\(\[]\s*((?:[^()\[\]]+?)\s+remix(?:\s+edit)?)\s*[\)\]]',
+    # Remix — EDM-aware. Must have a named artist before "remix" or named "mix".
+    # Handles possessive: "DJ Tiësto's In Search of Sunrise remix"
+    # Also catches: "ReDub", "re-edit", "re-fix"
+    ("remix", re.compile(
+        r'[\(\[]\s*'
+        r'((?:[^()\[\]]+?)'
+        r"(?:'s\s+[^()\[\]]+?)?"
+        r'\s+(?:remix(?:\s+edit)?|re-?(?:dub|edit|fix|rub|work|version|mix)))'
+        r'\s*(?:\(mixed\))?\s*[\)\]]',
         re.IGNORECASE)),
-    ("remix",        re.compile(
-        r'[\(\[]\s*((?:[^()\[\]]+?)\s+(?:club|extended|radio|dub|vocal|instrumental)\s+mix)\s*[\)\]]',
-        re.IGNORECASE)),
-    ("remix",        re.compile(
-        r'[\(\[]\s*((?:extended|club|radio|original|vocal|dub|instrumental)\s+(?:mix|version))\s*[\)\]]',
+    # Named remixer with bare "mix" suffix (e.g. "Sander Van Doorn mix")
+    # Only fires if there are 2+ words before "mix" (prevents "original mix" etc.)
+    ("remix", re.compile(
+        r'[\(\[]\s*'
+        r'((?:\S+\s+){1,}\S+)'   # 2+ words (the remixer name)
+        r'\s+mix'
+        r'\s*(?:\(mixed\))?\s*[\)\]]',
         re.IGNORECASE)),
     # Live
-    ("live",         re.compile(
+    ("live", re.compile(
         r'[\(\[]\s*(live(?:\s+(?:at|from|in|@)\s+[^()\[\]]+?)?)\s*[\)\]]',
         re.IGNORECASE)),
-    ("live",         re.compile(
+    ("live", re.compile(
         r'[\(\[]\s*(live(?:\s+version)?)\s*[\)\]]',
         re.IGNORECASE)),
     # Acoustic
-    ("acoustic",     re.compile(
+    ("acoustic", re.compile(
         r'[\(\[]\s*(acoustic(?:\s+(?:version|session|mix))?|unplugged(?:\s+version)?|mtv\s+unplugged)\s*[\)\]]',
         re.IGNORECASE)),
     # Demo
-    ("demo",         re.compile(
+    ("demo", re.compile(
         r'[\(\[]\s*(demo(?:\s+(?:version|recording|tape))?)\s*[\)\]]',
         re.IGNORECASE)),
     # Instrumental
     ("instrumental", re.compile(
         r'[\(\[]\s*(instrumental(?:\s+version)?)\s*[\)\]]',
         re.IGNORECASE)),
-    # Remaster — preserve year if present
-    ("remaster",     re.compile(
+    # Remaster
+    ("remaster", re.compile(
         r'[\(\[]\s*(\d{4}\s*(?:digital\s*)?remaster(?:ed)?(?:\s+version)?)\s*[\)\]]',
         re.IGNORECASE)),
-    ("remaster",     re.compile(
+    ("remaster", re.compile(
         r'[\(\[]\s*(remaster(?:ed)?(?:\s+\d{4})?(?:\s+version)?)\s*[\)\]]',
         re.IGNORECASE)),
     # Cover / tribute
-    ("cover",        re.compile(
+    ("cover", re.compile(
         r'[\(\[]\s*(cover(?:\s+version)?|tribute)\s*[\)\]]',
         re.IGNORECASE)),
-    # Single/radio edit
-    ("edit",         re.compile(
-        r'[\(\[]\s*((?:single|radio)\s+edit)\s*[\)\]]',
+    # Edit (explicit keyword, with or without artist prefix)
+    ("edit", re.compile(
+        r'[\(\[]\s*((?:\S+\s+)?(?:single|radio|airplay|short|club)\s+edit)\s*[\)\]]',
+        re.IGNORECASE)),
+    # Named artist vocal/extended edit: "Avicii Vocal Edit", "Klaas Vocal Edit"
+    ("edit", re.compile(
+        r'[\(\[]\s*(\S+\s+(?:vocal|extended|radio|airplay)\s+edit)\s*[\)\]]',
         re.IGNORECASE)),
 ]
 
@@ -124,7 +151,8 @@ _NOISE_ONLY = re.compile(
     r'lyrics?\s*video?|audio\s*only|hq|hd|4k|'
     r'full\s*version|visuali[sz]er|music\s*video|official\s*clip|'
     r'slowed.*?|reverb.*?|\d{4}\s*remake|'
-    r'feat\.?.*?'  # feat. tags — keep in base title search
+    r'mixed|'
+    r'feat\.?\s+[^()\[\]]+?'
     r')\s*[\)\]]',
     re.IGNORECASE
 )
@@ -134,6 +162,57 @@ _NOISE_TRAILING = re.compile(
     re.IGNORECASE
 )
 _LEADING_TAG = re.compile(r'^\s*\[(hd|hq|4k|official)\]\s*', re.IGNORECASE)
+
+# Studio mix labels that should be stripped from base_title for MB search
+_STUDIO_MIX_STRIP = re.compile(
+    r'\s*[\(\[]\s*('
+    r'original\s+(?:mix|version)|album\s+(?:mix|version|edit)|'
+    r'video\s+(?:mix|version)|airplay\s+(?:mix|edit|version)|'
+    r'single\s+version|lp\s+version|'
+    r'extended\s+(?:mix|version)|club\s+(?:mix|version)|'
+    r'radio\s+(?:mix|edit|version)'
+    r')\s*[\)\]]',
+    re.IGNORECASE
+)
+
+
+def _extract_remix_artist(label: str) -> str:
+    """
+    Extract the remixer name from a version label.
+    Examples:
+      "John 00 Fleming Remix"                    -> "John 00 Fleming"
+      "DJ Tiësto's In Search of Sunrise remix"   -> "DJ Tiësto"
+      "Armin Van Buuren's Rising Star Mix"       -> "Armin Van Buuren"
+      "Cosmic Gate's Third Contact remix"        -> "Cosmic Gate"
+      "Sander Van Doorn mix"                     -> "Sander Van Doorn"
+      "Pavel Khvaleev Remix"                     -> "Pavel Khvaleev"
+      "ReDub"                                    -> "" (no named artist)
+    """
+    label = label.strip()
+    label_lower = label.lower()
+
+    # Possessive FIRST — catches "Artist's <subtitle> remix/mix" before suffix loop
+    # This must run before suffix stripping or "Rising Star" gets left behind
+    poss = re.match(r"^(.+?)'s\s+.+?\s+(?:remix|mix|re-?\w+)$", label, re.IGNORECASE)
+    if poss:
+        return poss.group(1).strip()
+
+    # Strip trailing keyword suffixes
+    for suffix in (
+        " remix edit", " remix", " re-dub", " redub", " re-edit", " reedit",
+        " rework", " re-work", " re-fix", " re-version", " re-mix",
+        " club mix", " extended mix", " radio mix", " dub mix",
+        " vocal mix", " instrumental mix", " original mix", " mix",
+    ):
+        if label_lower.endswith(suffix):
+            artist = label[:len(label) - len(suffix)].strip()
+            if artist.lower() in ("", "original", "extended", "club",
+                                   "radio", "vocal", "dub", "instrumental",
+                                   "airplay", "single", "album", "video"):
+                return ""
+            return artist
+
+    return label
 
 
 def detect_track_version(title: str) -> dict:
@@ -154,34 +233,34 @@ def detect_track_version(title: str) -> dict:
     version_label = ""
     remix_artist  = ""
 
-    for vtype, pattern in _VERSION_PATTERNS:
-        m = pattern.search(raw)
-        if m:
-            version_type  = vtype
-            version_label = m.group(1).strip()
-            if vtype == "remix":
-                # Extract remixer — everything before "remix"/"mix"
-                label_lower = version_label.lower()
-                for suffix in (" remix edit", " remix", " club mix", " extended mix",
-                                " radio mix", " dub mix", " vocal mix",
-                                " instrumental mix", " original mix"):
-                    if label_lower.endswith(suffix):
-                        remix_artist = version_label[:len(version_label)-len(suffix)].strip()
-                        break
-                if not remix_artist:
-                    remix_artist = version_label
-            break
+    # Studio-only mixes take priority — check before remix patterns
+    if _STUDIO_MIX.search(raw):
+        version_type = "studio"
+    else:
+        for vtype, pattern in _VERSION_PATTERNS:
+            m = pattern.search(raw)
+            if m:
+                version_type  = vtype
+                version_label = m.group(1).strip()
+                # Strip trailing (Mixed) from label
+                version_label = re.sub(r'\s*\(mixed\)\s*$', '', version_label,
+                                       flags=re.IGNORECASE).strip()
+                if vtype == "remix":
+                    remix_artist = _extract_remix_artist(version_label)
+                break
 
     # clean_title — strip only pure noise, preserve version labels
     clean = _LEADING_TAG.sub('', raw).strip()
     clean = _NOISE_ONLY.sub('', clean).strip()
-    clean = _NOISE_TRAILING.sub('', clean).strip(' -—').strip()
+    clean = _NOISE_TRAILING.sub('', clean).strip(' -\u2014').strip()
 
-    # base_title — strip everything including version tags (for MB search of base track)
+    # base_title — strip ALL version tags for MB search
     base = clean
     for _, pattern in _VERSION_PATTERNS:
         base = pattern.sub('', base).strip()
-    base = _NOISE_ONLY.sub('', base).strip(' -—()[]').strip()
+    base = _STUDIO_MIX_STRIP.sub('', base).strip()
+    base = _STUDIO_MIX.sub('', base).strip()
+    base = _NOISE_ONLY.sub('', base).strip(' -\u2014()[]').strip()
 
     return {
         "version_type":  version_type,
@@ -190,8 +269,6 @@ def detect_track_version(title: str) -> dict:
         "clean_title":   clean,
         "base_title":    base or clean,
     }
-
-
 def _clean_title(s: str) -> str:
     """Legacy clean for YT parser — strips noise only, preserves version labels."""
     s = _LEADING_TAG.sub('', s)
