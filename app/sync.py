@@ -957,26 +957,30 @@ def save_master_snapshot(group: dict, tracks: list[dict]):
                       "navidrome_id", "spotify_id", "youtube_id",
                       "mb_artist_id", "mb_album_id",
                       "version_type", "version_label", "remix_artist", "base_title",
-                      "flagged", "metadata_override"]
+                      "flagged", "metadata_override",
+                      "wrong_version", "correct_version_type", "correct_remix_artist"]
         csv_rows = []
         for i, t in enumerate(tracks, 1):
             csv_rows.append({
-                "#":                i,
-                "artist":           t.get("artist",            ""),
-                "title":            t.get("title",              ""),
-                "album":            t.get("album",              ""),
-                "source":           t.get("source",             ""),
-                "navidrome_id":     t.get("navidrome_id",       ""),
-                "spotify_id":       t.get("spotify_id",         ""),
-                "youtube_id":       t.get("youtube_id",         ""),
-                "mb_artist_id":     t.get("mb_artist_id",       ""),
-                "mb_album_id":      t.get("mb_album_id",        ""),
-                "version_type":     t.get("version_type",       ""),
-                "version_label":    t.get("version_label",      ""),
-                "remix_artist":     t.get("remix_artist",       ""),
-                "base_title":       t.get("base_title",         ""),
-                "flagged":          "1" if t.get("flagged") else "",
-                "metadata_override":"1" if t.get("metadata_override") else "",
+                "#":                    i,
+                "artist":               t.get("artist",               ""),
+                "title":                t.get("title",                 ""),
+                "album":                t.get("album",                 ""),
+                "source":               t.get("source",                ""),
+                "navidrome_id":         t.get("navidrome_id",          ""),
+                "spotify_id":           t.get("spotify_id",            ""),
+                "youtube_id":           t.get("youtube_id",            ""),
+                "mb_artist_id":         t.get("mb_artist_id",          ""),
+                "mb_album_id":          t.get("mb_album_id",           ""),
+                "version_type":         t.get("version_type",          ""),
+                "version_label":        t.get("version_label",         ""),
+                "remix_artist":         t.get("remix_artist",          ""),
+                "base_title":           t.get("base_title",            ""),
+                "flagged":              "1" if t.get("flagged") else "",
+                "metadata_override":    "1" if t.get("metadata_override") else "",
+                "wrong_version":        "1" if t.get("wrong_version") else "",
+                "correct_version_type": t.get("correct_version_type",  ""),
+                "correct_remix_artist": t.get("correct_remix_artist",  ""),
             })
 
         def _write_csv(path: Path):
@@ -1074,6 +1078,9 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
                     "base_title":        row.get("base_title",        "").strip(),
                     "flagged":           row.get("flagged",           "").strip() == "1",
                     "metadata_override": row.get("metadata_override", "").strip() == "1",
+                    "wrong_version":           row.get("wrong_version",           "").strip() == "1",
+                    "correct_version_type":    row.get("correct_version_type",    "").strip(),
+                    "correct_remix_artist":    row.get("correct_remix_artist",    "").strip(),
                     "artist_override":   row.get("artist", "").strip(),
                     "title_override":    row.get("title",  "").strip(),
                 }
@@ -1098,6 +1105,11 @@ def _load_cached_fields_from_snapshot(group_id: str, tracks: list[dict]):
                     track[field] = prev[field]
                     changed = True
             # Restore flags — always (they don't come from source)
+            if prev.get("wrong_version"):
+                track["wrong_version"]        = True
+                track["correct_version_type"] = prev.get("correct_version_type", "studio")
+                track["correct_remix_artist"] = prev.get("correct_remix_artist", "")
+                changed = True
             if prev.get("flagged"):
                 track["flagged"] = True
                 changed = True
@@ -1516,6 +1528,100 @@ def sync_group(group: dict, conf: dict):
                 emit_ok(f"[ND] Playlist '{nd_playlist}' {action} — {len(nd_found)} tracks (ID: {pid})")
             else:
                 emit_warn("[ND] No tracks matched in Navidrome — playlist not updated")
+
+            # ════════════════════════════════════════════
+            # PHASE 7b — WRONG VERSION resolution
+            # For tracks flagged wrong_version, search for the correct version.
+            # If found → swap into master and remove the wrong one from playlists.
+            # If not found → send to Lidarr with correct version context + notify.
+            # ════════════════════════════════════════════
+            wrong_version_tracks = [t for t in master if t.get("wrong_version")]
+            if wrong_version_tracks and not _stop_requested:
+                emit_info("─" * 40)
+                emit_info(f"WRONG VERSION PHASE: {len(wrong_version_tracks)} track(s) flagged")
+                emit_info("─" * 40)
+                to_remove_from_master = []
+                for t in wrong_version_tracks:
+                    artist    = t.get("artist",               "")
+                    base      = t.get("base_title") or t.get("title", "")
+                    want_vt   = t.get("correct_version_type", "studio")
+                    want_ra   = t.get("correct_remix_artist", "")
+                    cur_title = t.get("title", "")
+                    emit_info(f"  [WV] '{artist} — {cur_title}' → want {want_vt}"
+                              + (f" by {want_ra}" if want_ra else ""))
+
+                    # Build the search title for the target version
+                    if want_vt == "studio":
+                        search_title = base
+                    elif want_vt == "live":
+                        search_title = f"{base} (live)"
+                    elif want_vt == "acoustic":
+                        search_title = f"{base} (acoustic)"
+                    elif want_vt == "remix" and want_ra:
+                        search_title = f"{base} ({want_ra} remix)"
+                    else:
+                        search_title = base
+
+                    # Search Navidrome for the correct version
+                    found_sid = importer.search_song(artist, search_title, conf)
+                    if not found_sid and want_vt == "studio":
+                        # Also try bare base_title without version qualifier
+                        found_sid = importer.search_song(artist, base, conf)
+
+                    if found_sid:
+                        emit_ok(f"  [WV] Found correct version in Navidrome — swapping")
+                        # Add correct version to master and nd_found, queue wrong for removal
+                        nd_found.append(found_sid)
+                        to_remove_from_master.append(t)
+                        t["_wv_resolved"] = True
+                    else:
+                        # Not in library — send to Lidarr with correct version context
+                        emit_warn(f"  [WV] Correct version not in Navidrome — sending to Lidarr")
+                        fake_track = {
+                            "artist":               artist,
+                            "title":                search_title,
+                            "album":                t.get("album", ""),
+                            "version_type":         want_vt,
+                            "remix_artist":         want_ra,
+                            "base_title":           base,
+                        }
+                        importer.process_missing([fake_track], conf,
+                                                  lidarr_mode=group.get("lidarr_mode", "album"))
+                        # Notify
+                        try:
+                            import app.notify as _notify
+                            _notify._fire(
+                                f"SoundStitch — Wrong Version",
+                                f"Could not find {want_vt} version of:\n"
+                                f"{artist} — {base}\n"
+                                f"Sent to Lidarr. Will swap in on next sync.",
+                                priority=5,
+                            )
+                        except Exception:
+                            pass
+
+                # Rebuild ND playlist if any swaps happened
+                if to_remove_from_master:
+                    emit_info(f"  [WV] Rebuilding playlist with {len(to_remove_from_master)} swap(s)")
+                    # Remove wrong versions from master list
+                    master[:] = [t for t in master if not t.get("_wv_resolved")]
+                    # Rebuild ND playlist with updated nd_found
+                    pid, action = importer.create_or_update_playlist(nd_playlist, nd_found, conf)
+                    emit_ok(f"  [WV] Playlist rebuilt — {len(nd_found)} tracks")
+                    # Remove wrong versions from linked playlists
+                    for t in to_remove_from_master:
+                        removed_ids = {
+                            "navidrome_id": t.get("navidrome_id", ""),
+                            "spotify_id":   t.get("spotify_id",   ""),
+                            "youtube_id":   t.get("youtube_id",   ""),
+                        }
+                        try:
+                            import app.main as _main
+                            _main._remove_track_from_playlists(group, removed_ids, conf)
+                        except Exception as e:
+                            emit_warn(f"  [WV] Error removing from linked playlists: {e}")
+
+                emit_info("─" * 40)
 
             # ════════════════════════════════════════════
             # PHASE 8 — LIDARR for tracks not in Navidrome

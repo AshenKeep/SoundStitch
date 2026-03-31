@@ -587,113 +587,42 @@ async def download_master_m3u(group_id: str, request: Request):
     )
 
 
-@app.delete("/api/master/{group_id}/track")
-async def delete_master_track(group_id: str, request: Request):
-    """
-    Remove a track from the master snapshot and from all linked playlists.
-    Also adds it to the group's blacklist so it is never re-added on sync.
-    Body: {"artist": str, "title": str}
-    """
-    require_auth(request)
-    body   = await request.json()
-    artist = body.get("artist", "").strip()
-    title  = body.get("title",  "").strip()
-    if not artist or not title:
-        raise HTTPException(status_code=400, detail="artist and title required")
+def _remove_track_from_playlists(group: dict, removed_ids: dict, conf: dict) -> list[str]:
+    """Remove a track from Navidrome, Spotify and YouTube playlists by stored IDs."""
+    errors = []
 
-    conf = cfg.load()
-
-    # Find group
-    group = next((g for g in conf.get("groups", []) if g["id"] == group_id), None)
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-
-    # 1. Add to group blacklist
-    bl = group.setdefault("blacklist", [])
-    already = any(
-        b.get("artist","").lower() == artist.lower() and
-        b.get("title","").lower()  == title.lower()
-        for b in bl
-    )
-    if not already:
-        bl.append({"artist": artist, "title": title})
-    cfg.save(conf)
-
-    # 2. Remove from master CSV
-    csv_path = Path(MASTER_DIR) / f"{group_id}.csv"
-    removed_ids = {"navidrome_id": "", "spotify_id": "", "youtube_id": ""}
-    if csv_path.exists():
-        import csv as _csv
-        content    = csv_path.read_text(encoding="utf-8")
-        lines      = content.splitlines()
-        meta_lines = [l for l in lines if (l.startswith("# ") or
-                      (l.startswith("#") and not l.startswith("#,")))]
-        data_lines = [l for l in lines if not (l.startswith("# ") or
-                      (l.startswith("#") and not l.startswith("#,"))) and l.strip()]
-
-        kept = []
-        reader = _csv.DictReader(data_lines)
-        for row in reader:
-            ra = row.get("artist","").strip().lower()
-            rt = row.get("title", "").strip().lower()
-            if ra == artist.lower() and rt == title.lower():
-                removed_ids["navidrome_id"] = row.get("navidrome_id","").strip()
-                removed_ids["spotify_id"]   = row.get("spotify_id",  "").strip()
-                removed_ids["youtube_id"]   = row.get("youtube_id",  "").strip()
-            else:
-                kept.append(row)
-
-        # Re-write CSV with track removed
-        fields = reader.fieldnames or ["#","artist","title","album","source",
-                                       "navidrome_id","spotify_id","youtube_id",
-                                       "mb_artist_id","mb_album_id","flagged","metadata_override"]
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            for ml in meta_lines:
-                f.write(ml + "\n")
-            writer = _csv.DictWriter(f, fieldnames=fields)
-            writer.writeheader()
-            for i, row in enumerate(kept, 1):
-                row["#"] = i
-                writer.writerow(row)
-
-    # 3. Remove from Navidrome playlist
     nd_playlist = group.get("navidrome", "") or group.get("discovery_nd_playlist", "")
-    nd_errors   = []
-    if nd_playlist and removed_ids["navidrome_id"]:
+    if nd_playlist and removed_ids.get("navidrome_id"):
         try:
             existing = importer.get_existing_playlist(nd_playlist, conf)
             if existing:
-                data   = importer.nd_get("getPlaylist", conf, {"id": existing["id"]})
-                tracks = data.get("playlist", {}).get("entry", [])
-                song_ids = [t["id"] for t in tracks if t.get("id") != removed_ids["navidrome_id"]]
+                data     = importer.nd_get("getPlaylist", conf, {"id": existing["id"]})
+                tracks   = data.get("playlist", {}).get("entry", [])
+                song_ids = [t["id"] for t in tracks
+                            if t.get("id") != removed_ids["navidrome_id"]]
                 importer.create_or_update_playlist(nd_playlist, song_ids, conf)
         except Exception as e:
-            nd_errors.append(str(e))
+            errors.append(f"ND: {e}")
 
-    # 4. Remove from Spotify playlist
-    sp_errors = []
-    sp_pid    = group.get("spotify_id", "")
-    if sp_pid and removed_ids["spotify_id"]:
+    sp_pid = group.get("spotify_id", "")
+    if sp_pid and removed_ids.get("spotify_id"):
         try:
             import app.spotify as _spotify
             if _spotify.is_connected():
-                uri = f"spotify:track:{removed_ids['spotify_id']}"
                 import requests as _req
                 token = _spotify._get_valid_token()
                 _req.delete(
                     f"https://api.spotify.com/v1/playlists/{sp_pid}/tracks",
                     headers={"Authorization": f"Bearer {token}",
                              "Content-Type": "application/json"},
-                    json={"tracks": [{"uri": uri}]},
+                    json={"tracks": [{"uri": f"spotify:track:{removed_ids['spotify_id']}"}]},
                     timeout=10
                 )
         except Exception as e:
-            sp_errors.append(str(e))
+            errors.append(f"SP: {e}")
 
-    # 5. Remove from YouTube Music playlist
-    yt_errors = []
-    yt_pid    = group.get("youtube_id", "")
-    if yt_pid and removed_ids["youtube_id"]:
+    yt_pid = group.get("youtube_id", "")
+    if yt_pid and removed_ids.get("youtube_id"):
         try:
             import app.youtube as _youtube
             if _youtube.is_connected():
@@ -701,13 +630,90 @@ async def delete_master_track(group_id: str, request: Request):
                 yt.remove_playlist_items(yt_pid,
                     [{"videoId": removed_ids["youtube_id"], "setVideoId": ""}])
         except Exception as e:
-            yt_errors.append(str(e))
+            errors.append(f"YT: {e}")
+
+    return errors
+
+
+def _remove_track_from_csv(group_id: str, artist: str, title: str) -> dict:
+    """Remove a track from the master CSV by artist+title. Returns the removed row's IDs."""
+    import csv as _csv
+    removed_ids = {"navidrome_id": "", "spotify_id": "", "youtube_id": ""}
+    csv_path    = Path(MASTER_DIR) / f"{group_id}.csv"
+    if not csv_path.exists():
+        return removed_ids
+
+    content    = csv_path.read_text(encoding="utf-8")
+    lines      = content.splitlines()
+    meta_lines = [l for l in lines if (l.startswith("# ") or
+                  (l.startswith("#") and not l.startswith("#,")))]
+    data_lines = [l for l in lines if not (l.startswith("# ") or
+                  (l.startswith("#") and not l.startswith("#,"))) and l.strip()]
+
+    kept   = []
+    reader = _csv.DictReader(data_lines)
+    for row in reader:
+        if (row.get("artist","").strip().lower() == artist.lower() and
+                row.get("title","").strip().lower() == title.lower()):
+            removed_ids["navidrome_id"] = row.get("navidrome_id","").strip()
+            removed_ids["spotify_id"]   = row.get("spotify_id",  "").strip()
+            removed_ids["youtube_id"]   = row.get("youtube_id",  "").strip()
+        else:
+            kept.append(row)
+
+    fields = list(reader.fieldnames or [
+        "#","artist","title","album","source","navidrome_id","spotify_id",
+        "youtube_id","mb_artist_id","mb_album_id","version_type","version_label",
+        "remix_artist","base_title","flagged","metadata_override"])
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        for ml in meta_lines:
+            f.write(ml + "\n")
+        writer = _csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        for i, row in enumerate(kept, 1):
+            row["#"] = i
+            writer.writerow(row)
+
+    return removed_ids
+
+
+@app.delete("/api/master/{group_id}/track")
+async def delete_master_track(group_id: str, request: Request):
+    """
+    Remove a track from the master snapshot and all linked playlists.
+    Body: {"artist": str, "title": str, "blacklist": bool}
+    If blacklist=true (default false), also adds to group.blacklist permanently.
+    """
+    require_auth(request)
+    body      = await request.json()
+    artist    = body.get("artist",    "").strip()
+    title     = body.get("title",     "").strip()
+    do_blacklist = bool(body.get("blacklist", False))
+    if not artist or not title:
+        raise HTTPException(status_code=400, detail="artist and title required")
+
+    conf  = cfg.load()
+    group = next((g for g in conf.get("groups", []) if g["id"] == group_id), None)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    if do_blacklist:
+        bl      = group.setdefault("blacklist", [])
+        already = any(b.get("artist","").lower() == artist.lower() and
+                      b.get("title","").lower()  == title.lower() for b in bl)
+        if not already:
+            bl.append({"artist": artist, "title": title})
+        cfg.save(conf)
+
+    removed_ids = _remove_track_from_csv(group_id, artist, title)
+    errors      = _remove_track_from_playlists(group, removed_ids, conf)
 
     return {
-        "ok":      True,
-        "removed": {"artist": artist, "title": title},
-        "ids":     removed_ids,
-        "errors":  nd_errors + sp_errors + yt_errors,
+        "ok":         True,
+        "removed":    {"artist": artist, "title": title},
+        "blacklisted": do_blacklist,
+        "ids":        removed_ids,
+        "errors":     errors,
     }
 
 
@@ -824,6 +830,71 @@ async def override_track_metadata(group_id: str, request: Request):
         writer.writerows(rows)
 
     return {"ok": updated}
+
+
+@app.post("/api/master/{group_id}/track/wrong-version")
+async def mark_wrong_version(group_id: str, request: Request):
+    """
+    Flag a track as the wrong version and specify what version is wanted.
+    On next sync SoundStitch will search for the correct version, swap it in,
+    and remove this one. If not in Navidrome, sends to Lidarr and notifies.
+
+    Body: {
+      "artist": str, "title": str,
+      "correct_version_type": "studio"|"live"|"acoustic"|"remix"|...,
+      "correct_remix_artist": str   (optional, for remix type)
+    }
+    """
+    require_auth(request)
+    body        = await request.json()
+    artist      = body.get("artist",               "").strip()
+    title       = body.get("title",                "").strip()
+    correct_vt  = body.get("correct_version_type", "studio").strip()
+    correct_ra  = body.get("correct_remix_artist", "").strip()
+    if not artist or not title:
+        raise HTTPException(status_code=400, detail="artist and title required")
+
+    import csv as _csv
+    csv_path = Path(MASTER_DIR) / f"{group_id}.csv"
+    if not csv_path.exists():
+        raise HTTPException(status_code=404)
+
+    content    = csv_path.read_text(encoding="utf-8")
+    lines      = content.splitlines()
+    meta_lines = [l for l in lines if (l.startswith("# ") or
+                  (l.startswith("#") and not l.startswith("#,")))]
+    data_lines = [l for l in lines if not (l.startswith("# ") or
+                  (l.startswith("#") and not l.startswith("#,"))) and l.strip()]
+
+    rows   = list(_csv.DictReader(data_lines))
+    fields = list(_csv.DictReader(data_lines).fieldnames or [])
+    for extra in ("wrong_version", "correct_version_type", "correct_remix_artist",
+                  "version_type", "version_label", "remix_artist", "base_title",
+                  "flagged", "metadata_override"):
+        if extra not in fields:
+            fields.append(extra)
+
+    updated = False
+    for row in rows:
+        if (row.get("artist","").strip().lower() == artist.lower() and
+                row.get("title","").strip().lower() == title.lower()):
+            row["wrong_version"]         = "1"
+            row["correct_version_type"]  = correct_vt
+            row["correct_remix_artist"]  = correct_ra
+            row["flagged"]               = ""  # clear other flags
+            updated = True
+            break
+
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        for ml in meta_lines:
+            f.write(ml + "\n")
+        writer = _csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    return {"ok": updated}
+
+
 @app.get("/api/schedules")
 async def get_schedules(request: Request):
     require_auth(request)

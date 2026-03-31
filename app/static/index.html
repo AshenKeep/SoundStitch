@@ -207,6 +207,9 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
 .track-row:hover{background:#ffffff04}
 .track-row.flagged{background:rgba(240,192,96,.07);border-left-color:var(--yellow)}
 .track-row.overridden{background:rgba(80,200,120,.06);border-left-color:var(--green)}
+.track-row.wrong-version{background:rgba(249,115,22,.07);border-left-color:#f97316}
+.master-sort-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:3px 10px;cursor:pointer;font-family:var(--mono)}
+.master-sort-btn.active{border-color:var(--p);color:var(--p);background:#c8b6ff11}
 .track-num{color:var(--muted);min-width:26px;text-align:right;font-size:11px;font-family:var(--mono);flex-shrink:0}
 .track-info{flex:1;min-width:0}
 .track-title{color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -350,7 +353,7 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
       </svg>
       <div style="display:flex;flex-direction:column;gap:1px">
         <span class="wordmark">SoundStitch</span>
-        <span class="ver">v0.6.17</span>
+        <span class="ver">v0.6.18</span>
       </div>
     </a>
 
@@ -475,6 +478,14 @@ textarea{resize:vertical;min-height:80px;font-size:11px}
                 <span style="display:flex;align-items:center;gap:4px"><span class="src-dot src-sp"></span> Spotify</span>
                 <span style="display:flex;align-items:center;gap:4px"><span class="src-dot src-yt"></span> YouTube</span>
               </span>
+            </div>
+            <div style="padding:6px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px">
+              <span style="font-size:10px;color:var(--muted);margin-right:4px">Sort:</span>
+              <button class="master-sort-btn active" data-sort="natural" onclick="setMasterSort('natural')">Default</button>
+              <button class="master-sort-btn" data-sort="artist"  onclick="setMasterSort('artist')">Artist A–Z</button>
+              <button class="master-sort-btn" data-sort="title"   onclick="setMasterSort('title')">Title A–Z</button>
+              <button class="master-sort-btn" data-sort="version" onclick="setMasterSort('version')">Version</button>
+              <button class="master-sort-btn" data-sort="source"  onclick="setMasterSort('source')">Source</button>
             </div>
             <div class="track-list" id="master-tracks"></div>
           </div>
@@ -1627,32 +1638,54 @@ async function loadHistoryVersion(groupId,filename){
   _currentTracks=data.tracks||[];
   renderMasterTracks(_currentTracks);
 }
+// ── Master tab sort state ─────────────────────────────────────────
+let _masterSort = 'natural'; // natural|artist|title|version|source
+function setMasterSort(s){
+  _masterSort=s;
+  document.querySelectorAll('.master-sort-btn').forEach(b=>
+    b.classList.toggle('active', b.dataset.sort===s));
+  renderMasterTracks(_currentTracks);
+}
+function _sortedTracks(tracks){
+  if(_masterSort==='natural') return tracks;
+  const copy=[...tracks];
+  if(_masterSort==='artist') copy.sort((a,b)=>(a.artist||'').localeCompare(b.artist||''));
+  else if(_masterSort==='title') copy.sort((a,b)=>(a.title||'').localeCompare(b.title||''));
+  else if(_masterSort==='version') copy.sort((a,b)=>(a.version_type||'studio').localeCompare(b.version_type||'studio'));
+  else if(_masterSort==='source') copy.sort((a,b)=>(a.source||'').localeCompare(b.source||''));
+  return copy;
+}
 function renderMasterTracks(tracks){
   const el=$('master-tracks');
   if(!tracks||!tracks.length){el.innerHTML='<div class="empty">No tracks</div>';return;}
-  el.innerHTML=tracks.map((t,i)=>{
+  const sorted=_sortedTracks(tracks);
+  el.innerHTML=sorted.map((t,i)=>{
+    const origIdx=tracks.indexOf(t); // index in _currentTracks for actions
     const sources=(t.source||'').split(',');
     const dots=[
       sources.includes('navidrome')?'<div class="src-dot src-nd" title="Navidrome"></div>':'',
       sources.includes('spotify') ?'<div class="src-dot src-sp" title="Spotify"></div>':'',
       sources.includes('youtube') ?'<div class="src-dot src-yt" title="YouTube"></div>':'',
     ].join('');
-    const album   = t.album?`<span style="color:var(--muted);font-size:10px"> · ${esc(t.album)}</span>`:'';
-    const isFlagged   = t.flagged==='1'||t.flagged===true;
-    const isOverride  = t.metadata_override==='1'||t.metadata_override===true;
-    const rowClass    = isFlagged?'flagged':isOverride?'overridden':'';
-    const badge       = isFlagged
-      ? '<span style="font-size:9px;color:var(--yellow);margin-left:4px" title="Flagged — bad metadata">⚑</span>'
-      : isOverride
-        ? '<span style="font-size:9px;color:var(--green);margin-left:4px" title="Metadata corrected">✓</span>'
-        : '';
-    const vtype   = t.version_type&&t.version_type!=='studio'?t.version_type:'';
-    const vbadge  = vtype
+    const album      = t.album?`<span style="color:var(--muted);font-size:10px"> · ${esc(t.album)}</span>`:'';
+    const isFlagged  = t.flagged==='1'||t.flagged===true;
+    const isOverride = t.metadata_override==='1'||t.metadata_override===true;
+    const isWrong    = t.wrong_version==='1'||t.wrong_version===true;
+    const rowClass   = isWrong?'wrong-version':isFlagged?'flagged':isOverride?'overridden':'';
+    const badge      = isWrong
+      ? `<span style="font-size:9px;color:var(--orange,#f97316);margin-left:4px" title="Wrong version — wants ${esc(t.correct_version_type||'studio')}">⟳</span>`
+      : isFlagged
+        ? '<span style="font-size:9px;color:var(--yellow);margin-left:4px" title="Flagged — bad metadata">⚑</span>'
+        : isOverride
+          ? '<span style="font-size:9px;color:var(--green);margin-left:4px" title="Metadata corrected">✓</span>'
+          : '';
+    const vtype  = t.version_type&&t.version_type!=='studio'?t.version_type:'';
+    const vbadge = vtype
       ? `<span style="font-size:9px;color:var(--muted);margin-left:5px;font-family:var(--mono);text-transform:uppercase;letter-spacing:.04em" title="${esc(t.version_label||vtype)}">${vtype}</span>`
       : '';
     const artist = esc(t.artist||'?');
     const title  = esc(t.title||'?');
-    return `<div class="track-row ${rowClass}" data-i="${i}">
+    return `<div class="track-row ${rowClass}" data-i="${origIdx}">
       <div class="track-num">${i+1}</div>
       <div class="track-info">
         <div class="track-title">${title}${badge}${vbadge}${album}</div>
@@ -1661,25 +1694,37 @@ function renderMasterTracks(tracks){
       <div class="track-sources">${dots}</div>
       <div class="track-actions">
         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px"
-          onclick="openTrackEdit(${i})" title="Edit / fix metadata">Edit</button>
+          onclick="openTrackEdit(${origIdx})" title="Edit / fix metadata">Edit</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--orange,#f97316)"
+          onclick="openWrongVersion(${origIdx})" title="Flag as wrong version">
+          ${isWrong?'Re-flag':'Wrong ver'}</button>
         <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px;color:var(--yellow)"
-          onclick="flagTrack(${i},${!isFlagged})" title="${isFlagged?'Unflag':'Flag bad metadata'}">
+          onclick="flagTrack(${origIdx},${!isFlagged})" title="${isFlagged?'Unflag':'Flag bad metadata'}">
           ${isFlagged?'Unflag':'Flag'}</button>
+        <button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 7px"
+          onclick="removeTrack(${origIdx})" title="Remove this sync only (can return from sources)">Remove</button>
         <button class="btn btn-danger btn-sm" style="font-size:10px;padding:2px 7px"
-          onclick="deleteTrack(${i})" title="Remove from master + all playlists">Delete</button>
+          onclick="blacklistTrack(${origIdx})" title="Remove permanently — never re-added">Block</button>
       </div>
     </div>`;
   }).join('');
 }
-async function deleteTrack(i){
+async function removeTrack(i){
   const t=_currentTracks[i];
   if(!t||!_currentGroupId)return;
-  if(!confirm(`Remove "${t.artist} — ${t.title}" from master and all linked playlists?\n\nThis also blacklists it so it won't be re-added on the next sync.`))return;
-  const r=await api('DELETE',`/api/master/${_currentGroupId}/track`,{artist:t.artist,title:t.title});
-  if(!r||!r.ok){toast('Delete failed','err');return;}
-  const d=await r.json();
-  if(d.errors&&d.errors.length)toast('Removed with some errors — check console','err');
-  else toast('Track removed and blacklisted');
+  if(!confirm(`Remove "${t.artist} — ${t.title}" from master and all linked playlists?\n\nIt can return on the next sync if still in a source playlist.`))return;
+  const r=await api('DELETE',`/api/master/${_currentGroupId}/track`,{artist:t.artist,title:t.title,blacklist:false});
+  if(!r||!r.ok){toast('Remove failed','err');return;}
+  toast('Track removed');
+  loadMasterTracks(_currentGroupId);
+}
+async function blacklistTrack(i){
+  const t=_currentTracks[i];
+  if(!t||!_currentGroupId)return;
+  if(!confirm(`Permanently block "${t.artist} — ${t.title}"?\n\nIt will be removed from all playlists and never re-added on future syncs.`))return;
+  const r=await api('DELETE',`/api/master/${_currentGroupId}/track`,{artist:t.artist,title:t.title,blacklist:true});
+  if(!r||!r.ok){toast('Block failed','err');return;}
+  toast('Track blocked permanently');
   loadMasterTracks(_currentGroupId);
 }
 async function flagTrack(i, setFlagged){
@@ -1693,6 +1738,40 @@ async function flagTrack(i, setFlagged){
     toast(setFlagged?'Flagged as bad metadata':'Flag cleared');
   } else toast('Failed','err');
 }
+// ── Wrong version ────────────────────────────────────────────────
+let _wrongVersionIdx=null;
+function openWrongVersion(i){
+  const t=_currentTracks[i];if(!t)return;
+  _wrongVersionIdx=i;
+  $('wv-artist').textContent=t.artist||'?';
+  $('wv-title').textContent=t.title||'?';
+  $('wv-current-type').textContent=t.version_type&&t.version_type!=='studio'?t.version_type:'studio';
+  $('wv-want-type').value=t.correct_version_type||'studio';
+  $('wv-want-remix').value=t.correct_remix_artist||'';
+  toggleWvRemixField();
+  $('wrong-version-modal').classList.add('open');
+}
+function toggleWvRemixField(){
+  $('wv-remix-row').style.display=$('wv-want-type').value==='remix'?'block':'none';
+}
+async function saveWrongVersion(){
+  if(_wrongVersionIdx===null||!_currentGroupId)return;
+  const t=_currentTracks[_wrongVersionIdx];
+  const body={
+    artist:               t.artist,
+    title:                t.title,
+    correct_version_type: $('wv-want-type').value,
+    correct_remix_artist: $('wv-want-remix').value.trim(),
+  };
+  const r=await api('POST',`/api/master/${_currentGroupId}/track/wrong-version`,body);
+  if(r&&r.ok){
+    toast('Wrong version flagged — will be resolved on next sync');
+    $('wrong-version-modal').classList.remove('open');
+    loadMasterTracks(_currentGroupId);
+  } else toast('Save failed','err');
+}
+// ── deleteTrack kept as alias for removeTrack (backward compat) ──
+async function deleteTrack(i){ return removeTrack(i); }
 function toggleRemixArtistField(){
   const vt=$('tedit-version-type').value;
   $('tedit-remix-row').style.display=vt==='remix'?'block':'none';
@@ -2706,6 +2785,50 @@ async function saveLastfmConfig(){
     <div class="modal-ft">
       <button class="btn btn-ghost" onclick="$('track-edit-modal').classList.remove('open')">Cancel</button>
       <button class="btn btn-primary" onclick="saveTrackEdit()">Save &amp; Lock Metadata</button>
+    </div>
+  </div>
+</div>
+<!-- ════════════ WRONG VERSION MODAL ════════════ -->
+<div class="modal-overlay" id="wrong-version-modal">
+  <div class="modal" style="width:460px;max-width:95vw">
+    <div class="modal-hd">
+      <span>Flag Wrong Version</span>
+      <button class="close-x" onclick="$('wrong-version-modal').classList.remove('open')">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:14px;padding:10px 14px;background:var(--surface2);border:1px solid var(--border)">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">Current track</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text)" id="wv-title"></div>
+        <div style="font-size:11px;color:var(--muted)" id="wv-artist"></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">Detected version: <span style="color:var(--text);font-family:var(--mono)" id="wv-current-type"></span></div>
+      </div>
+      <div class="info-box" style="margin-bottom:14px">
+        On the next sync SoundStitch will search Navidrome for the correct version. If found, it swaps in the correct one and removes this entry automatically. If not found, it sends the request to Lidarr and notifies you.
+      </div>
+      <div class="grid-2" style="margin-bottom:10px">
+        <div class="field">
+          <label>What version should this be?</label>
+          <select id="wv-want-type" onchange="toggleWvRemixField()">
+            <option value="studio">Studio (default)</option>
+            <option value="live">Live</option>
+            <option value="acoustic">Acoustic</option>
+            <option value="remix">Remix</option>
+            <option value="demo">Demo</option>
+            <option value="instrumental">Instrumental</option>
+            <option value="remaster">Remaster</option>
+            <option value="edit">Single/Radio Edit</option>
+          </select>
+        </div>
+      </div>
+      <div class="field" id="wv-remix-row" style="display:none;margin-bottom:10px">
+        <label>Remix Artist <span style="color:var(--muted);font-weight:400">(important for EDM)</span></label>
+        <input type="text" id="wv-want-remix" placeholder="e.g. John 00 Fleming">
+        <div class="hint">Used to find the specific remix release</div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn btn-ghost" onclick="$('wrong-version-modal').classList.remove('open')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveWrongVersion()">Flag &amp; Queue for Fix</button>
     </div>
   </div>
 </div>

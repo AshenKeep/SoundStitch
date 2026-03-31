@@ -2,7 +2,7 @@
 
 A self-hosted playlist sync engine. Union-merges your Navidrome, Spotify, and YouTube Music playlists, pushes missing tracks to Lidarr for download, and keeps everything in sync automatically.
 
-![Version](https://img.shields.io/badge/version-0.6.17-blue)
+![Version](https://img.shields.io/badge/version-0.6.18-blue)
 ![Docker](https://img.shields.io/badge/docker-ghcr.io%2Fashenkeep%2Fsoundstitch-blue)
 
 ## Features
@@ -192,9 +192,9 @@ SoundStitch generates a self-signed certificate at build time. Your browser will
 | Tag | Description |
 |-----|-------------|
 | `latest` | Current stable release — recommended for most users |
-| `0.6.17` | Specific version — pin this if you want to control updates manually |
+| `0.6.18` | Specific version — pin this if you want to control updates manually |
 | `dev` | Development build — latest changes, may be unstable |
-| `0.6.17-dev` | Specific dev build |
+| `0.6.18-dev` | Specific dev build |
 
 **Stable (default):**
 ```yaml
